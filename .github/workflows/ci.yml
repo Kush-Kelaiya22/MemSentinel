@@ -37,14 +37,15 @@ jobs:
       - name: Test Native GCC Plugin Execution (Linux)
         if: runner.os == 'Linux'
         run: |
-          echo "=== Testing compile_fail with native Linux plugin ==="
-          ! gcc-13 -fplugin=build/lib/safe_c.so -c tests/compile_fail/double_free.c -o /dev/null
-          ! gcc-13 -fplugin=build/lib/safe_c.so -c tests/compile_fail/altered_pointer_free.c -o /dev/null
-          ! gcc-13 -fplugin=build/lib/safe_c.so -c tests/compile_fail/memory_leak.c -o /dev/null
+          PLUGIN_PATH="$(pwd)/build/lib/safe_c.so"
+          echo "=== Testing compile_fail with native Linux plugin at ${PLUGIN_PATH} ==="
+          ! gcc-13 -fplugin="${PLUGIN_PATH}" -c tests/compile_fail/double_free.c -o /dev/null
+          ! gcc-13 -fplugin="${PLUGIN_PATH}" -c tests/compile_fail/altered_pointer_free.c -o /dev/null
+          ! gcc-13 -fplugin="${PLUGIN_PATH}" -c tests/compile_fail/memory_leak.c -o /dev/null
           echo "=== Testing compile_pass with native Linux plugin ==="
-          gcc-13 -fplugin=build/lib/safe_c.so -c tests/compile_pass/valid_pointers.c -o /dev/null
-          gcc-13 -fplugin=build/lib/safe_c.so -c tests/compile_pass/valid_arithmetic.c -o /dev/null
-          g++-13 -fplugin=build/lib/safe_c.so -c tests/compile_pass/valid_cpp_raii.cpp -o /dev/null
+          gcc-13 -fplugin="${PLUGIN_PATH}" -c tests/compile_pass/valid_pointers.c -o /dev/null
+          gcc-13 -fplugin="${PLUGIN_PATH}" -c tests/compile_pass/valid_arithmetic.c -o /dev/null
+          g++-13 -fplugin="${PLUGIN_PATH}" -c tests/compile_pass/valid_cpp_raii.cpp -o /dev/null
           echo "=== Native Linux GCC Plugin Verification Passed ==="
 
       - name: Set up MinGW (Windows)
