@@ -3,7 +3,7 @@
 #include <mutex>
 #include <iostream>
 
-namespace memcheck::rt {
+namespace safe_c::rt {
 
 AllocationLedger& AllocationLedger::instance() {
     static AllocationLedger inst;

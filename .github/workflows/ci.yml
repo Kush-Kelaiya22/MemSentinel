@@ -1,4 +1,4 @@
-name: Safe_C++ CI
+name: Safe-C CI
 
 on:
   push:

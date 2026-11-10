@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(Safe_C++
+project(Safe-C
     VERSION 1.0.0
-    DESCRIPTION "Safe_C++: Native GCC/G++ Memory Safety Plugin and Addon with Compile-Time Enforcement and Runtime Guardrails"
+    DESCRIPTION "Safe-C: Native GCC/G++ Memory Safety Plugin and Toolchain Addon with Compile-Time Enforcement and Runtime Guardrails"
     LANGUAGES C CXX
 )
 

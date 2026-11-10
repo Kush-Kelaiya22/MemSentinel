@@ -6,7 +6,7 @@
 #include <mutex>
 #include <cstdlib>
 
-namespace memcheck::rt {
+namespace safe_c::rt {
 
 namespace {
 std::mutex g_log_mutex;
@@ -26,7 +26,9 @@ Logger& Logger::instance() {
 }
 
 Logger::Logger() {
-    const char* env_path = std::getenv("MEMCHECK_LOG_PATH");
+    const char* env_path = std::getenv("SAFE_C_LOG_PATH");
+    if (!env_path || !*env_path) env_path = std::getenv("SAFE_CPP_LOG_PATH");
+    if (!env_path || !*env_path) env_path = std::getenv("MEMCHECK_LOG_PATH");
     if (env_path && *env_path) {
         log_filepath_ = env_path;
     }
@@ -46,12 +48,12 @@ void Logger::log_violation(const LogEntry& entry) {
 
     std::ofstream out(log_filepath_, std::ios::app);
     if (!out.is_open()) {
-        std::cerr << "memcheck: fatal error: failed to open log file '" << log_filepath_ << "'\n";
+        std::cerr << "safe-c: fatal error: failed to open log file '" << log_filepath_ << "'\n";
         return;
     }
 
     out << "======================================================================\n"
-        << "MEMSENTINEL RUNTIME SAFETY VIOLATION REPORT\n"
+        << "SAFE-C RUNTIME SAFETY VIOLATION REPORT\n"
         << "Timestamp      : " << get_current_iso_timestamp() << "\n"
         << "Violation Type : " << violation_name(entry.violation) << "\n"
         << "Target Address : 0x" << std::hex << reinterpret_cast<uintptr_t>(entry.target_address) << std::dec << "\n";
@@ -86,7 +88,7 @@ void Logger::log_violation(const LogEntry& entry) {
     out.flush();
 
     // Also print concise notice to stderr
-    std::cerr << "memsentinel: [RUNTIME GUARDRAIL] " << violation_name(entry.violation)
+    std::cerr << "safe-c: [RUNTIME GUARDRAIL] " << violation_name(entry.violation)
               << " detected at address 0x" << std::hex << reinterpret_cast<uintptr_t>(entry.target_address)
               << std::dec << ". Diagnostic details saved to '" << log_filepath_ << "'.\n";
 }
@@ -99,11 +101,11 @@ void Logger::log_leak_summary(size_t leak_count, size_t total_bytes) {
     if (!out.is_open()) return;
 
     out << "======================================================================\n"
-        << "MEMSENTINEL RUNTIME LEAK SUMMARY\n"
+        << "SAFE-C RUNTIME LEAK SUMMARY\n"
         << "Timestamp       : " << get_current_iso_timestamp() << "\n"
         << "Unfreed Blocks  : " << leak_count << "\n"
         << "Total Leak Bytes: " << total_bytes << " bytes\n"
         << "======================================================================\n\n";
 }
 
-} // namespace memcheck::rt
+} // namespace safe_c::rt

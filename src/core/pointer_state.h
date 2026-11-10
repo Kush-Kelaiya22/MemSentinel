@@ -1,8 +1,8 @@
-#ifndef MEMCHECK_CORE_POINTER_STATE_H
-#define MEMCHECK_CORE_POINTER_STATE_H
+#ifndef SAFE_C_CORE_POINTER_STATE_H
+#define SAFE_C_CORE_POINTER_STATE_H
 
-#include "memcheck/common.h"
-#include "memcheck/typestate.h"
+#include "safe_c/common.h"
+#include "safe_c/typestate.h"
 #include <string>
 #include <memory>
 #include <unordered_map>
@@ -10,7 +10,7 @@
 #include <optional>
 #include <vector>
 
-namespace safe_cpp::core {
+namespace safe_c::core {
 
 // Memory Allocation Cell represents an underlying heap chunk
 struct AllocationCell {
@@ -70,6 +70,13 @@ public:
     // Register an alias: target = source + offset
     void register_alias(const std::string& target, const std::string& source, int64_t offset_delta = 0);
 
+    // Check if any variable bound to cell (excluding exclude_symbol) retains base address (offset == 0)
+    [[nodiscard]] bool has_base_variable(const std::shared_ptr<AllocationCell>& cell, const std::string& exclude_symbol = "") const;
+
+    // Checks whether altering symbol's offset by byte_delta is permitted
+    // (permitted as long as there is a variable that contains the original base address)
+    [[nodiscard]] bool can_alter_offset(const std::string& symbol, int64_t byte_delta) const;
+
     // Apply pointer arithmetic: ptr += delta
     void apply_pointer_arithmetic(const std::string& symbol, int64_t byte_delta);
 
@@ -96,16 +103,26 @@ public:
     [[nodiscard]] const PointerBinding* get_binding(const std::string& symbol) const;
     [[nodiscard]] bool has_symbol(const std::string& symbol) const;
 
+    void clear() {
+        bindings_.clear();
+        all_cells_.clear();
+        next_cell_id_ = 1;
+    }
+
 private:
     uint64_t next_cell_id_{1};
     std::unordered_map<std::string, std::unique_ptr<PointerBinding>> bindings_;
     std::vector<std::shared_ptr<AllocationCell>> all_cells_;
 };
 
-} // namespace safe_cpp::core
+} // namespace safe_c::core
 
-namespace memcheck::core {
-    using namespace safe_cpp::core;
+namespace safe_cpp::core {
+    using namespace safe_c::core;
 }
 
-#endif // MEMCHECK_CORE_POINTER_STATE_H
+namespace memcheck::core {
+    using namespace safe_c::core;
+}
+
+#endif // SAFE_C_CORE_POINTER_STATE_H

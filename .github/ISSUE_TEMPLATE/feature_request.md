@@ -1,21 +1,16 @@
 ---
 name: Feature Request
-about: Suggest an idea or new detection mechanism for MemCheck
+about: Suggest an idea or new detection mechanism for Safe-C
 title: '[FEATURE] '
-labels: 'enhancement'
+labels: enhancement
 assignees: ''
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem or use case is.
+**Is your feature request related to a problem? Please describe:**
+A clear and concise description of the problem.
 
-**Describe the Solution You'd Like**
-A clear and concise description of what you want to happen.
+**Describe the Solution You'd Like:**
+A clear and concise description of the behavior or invariant check desired.
 
-**Example C/C++ Code**
-```c
-// Code pattern to detect or support
-```
-
-**Additional Context**
-Add any other context, compiler compatibility considerations, or performance benchmarks here.
+**Additional Context:**
+Add any code examples or specification details here.

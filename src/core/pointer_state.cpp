@@ -1,7 +1,7 @@
 #include "pointer_state.h"
 #include <algorithm>
 
-namespace safe_cpp::core {
+namespace safe_c::core {
 
 StateTable::StateTable(const StateTable& other)
     : next_cell_id_(other.next_cell_id_) {
@@ -60,6 +60,33 @@ void StateTable::register_alias(
         int64_t new_offset = it->second->offset_bytes() + offset_delta;
         bindings_[target] = std::make_unique<PointerBinding>(target, it->second->cell(), new_offset);
     }
+}
+
+bool StateTable::has_base_variable(const std::shared_ptr<AllocationCell>& cell, const std::string& exclude_symbol) const {
+    if (!cell) return false;
+    for (const auto& [name, binding] : bindings_) {
+        if (!name.empty() && name != exclude_symbol && binding && binding->cell() == cell) {
+            if (binding->offset_bytes() == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool StateTable::can_alter_offset(const std::string& symbol, int64_t byte_delta) const {
+    auto it = bindings_.find(symbol);
+    if (it == bindings_.end() || !it->second || !it->second->cell()) {
+        return true; // Not an actively tracked heap cell
+    }
+    const auto& binding = it->second;
+    int64_t target_offset = binding->offset_bytes() + byte_delta;
+    if (target_offset == 0) {
+        // Restoring to base address is always permitted
+        return true;
+    }
+    // Non-zero offset is permitted as long as there is a variable containing the original base address
+    return has_base_variable(binding->cell(), symbol);
 }
 
 void StateTable::apply_pointer_arithmetic(const std::string& symbol, int64_t byte_delta) {
@@ -129,11 +156,14 @@ void StateTable::mark_escaped(const std::string& symbol) {
 
 std::vector<std::pair<std::string, std::shared_ptr<AllocationCell>>> StateTable::find_leaks() const {
     std::vector<std::pair<std::string, std::shared_ptr<AllocationCell>>> leaks;
+    std::unordered_set<uint64_t> reported_cells;
     for (const auto& [symbol, binding] : bindings_) {
         if (binding && binding->cell()) {
             const auto& cell = binding->cell();
             if (cell->state == Typestate::Allocated && !cell->escaped) {
-                leaks.emplace_back(symbol, cell);
+                if (reported_cells.insert(cell->cell_id).second) {
+                    leaks.emplace_back(symbol, cell);
+                }
             }
         }
     }
@@ -152,4 +182,4 @@ bool StateTable::has_symbol(const std::string& symbol) const {
     return bindings_.find(symbol) != bindings_.end();
 }
 
-} // namespace safe_cpp::core
+} // namespace safe_c::core

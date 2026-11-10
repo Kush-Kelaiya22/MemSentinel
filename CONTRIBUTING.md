@@ -1,6 +1,6 @@
-# Contributing to MemCheck
+# Contributing to Safe-C
 
-Thank you for your interest in contributing to **MemCheck**! This guide outlines how to contribute to the project, coding standards, branch rules, and pull request workflows.
+Thank you for your interest in contributing to **Safe-C**! This guide outlines how to contribute to the project, coding standards, branch rules, and pull request workflows.
 
 ## Development Workflow
 
@@ -10,16 +10,14 @@ Thank you for your interest in contributing to **MemCheck**! This guide outlines
      git checkout -b feature/your-feature-name
      ```
 2. **Coding Standards:**
-   - **Language Standard:** Modern C++ (C++17 / C++20).
-   - **Safety Invariants:** All checker code and runtime libraries must be strictly memory-safe.
-     - Never use unmanaged owning raw pointers.
-     - Utilize `std::unique_ptr`, `std::shared_ptr`, and `std::span`.
-     - Zero memory leaks, zero dangling references.
-   - **GCC Plugin Compatibility:** Compatible across GCC versions >= 4.5.0 (the first version to support plugins).
+   - **Language Standard:** Strictly C++20 and C11.
+   - **Safety Invariants:** Checker and runtime code must be strictly memory-safe without memory leaks or dangling pointers.
+   - **GCC Plugin Compatibility:** Compatible across GCC versions >= 4.5.0.
+   - **Pointer Offset Model:** Maintain invariant that a pointer's offset can be modified through arithmetic as long as a variable retains the base address.
 3. **Running Tests:**
-   - Ensure all `compile_fail/` test cases successfully fail at compile-time.
+   - Ensure all `compile_fail/` test cases fail at compile-time with exact diagnostics.
    - Ensure all `compile_pass/` test cases compile cleanly without warnings or errors.
+   - Run `ctest --test-dir build --output-on-failure`.
 4. **Submitting Pull Requests:**
-   - Link any related GitHub issue (e.g. `Resolves #X`).
    - Write clear commit messages summarizing changes.
-   - Maintain documentation in `docs/` and `README.md`.
+   - Maintain documentation in `docs/index.html` and `README.md`.

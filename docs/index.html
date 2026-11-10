@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Safe_C++: Native Compile-Time Memory Safety Plugin for GCC and G++</title>
-  <meta name="description" content="Safe_C++ is a native compile-time memory safety plugin and addon for GCC and G++. Intrinsic typestate analysis halts compilation on memory violations without wrapper executables.">
+  <title>Safe-C: Native Compile-Time Memory Safety Extension for GCC and G++</title>
+  <meta name="description" content="Safe-C is a native compile-time memory safety plugin and toolchain addon for GCC and G++. Intrinsic typestate analysis halts compilation on memory violations without wrapper executables.">
   <style>
     :root {
       --bg-primary: #0e1117;
@@ -98,81 +98,86 @@
       font-size: 1.05rem;
       color: var(--text-muted);
       max-width: 850px;
-      margin-bottom: 1.5rem;
     }
-    .badge-bar {
+    .hero-badges {
       display: flex;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
       flex-wrap: wrap;
-      gap: 0.5rem;
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
     }
     .badge {
       display: inline-block;
-      padding: 0.25rem 0.6rem;
-      background-color: var(--bg-tertiary);
+      padding: 0.2rem 0.55rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      font-family: var(--font-mono);
       border: 1px solid var(--border-color);
       border-radius: 3px;
-      color: var(--text-accent);
+      color: var(--text-muted);
+      background-color: var(--bg-tertiary);
     }
     section {
       margin-bottom: 3rem;
     }
     h2 {
-      font-size: 1.4rem;
+      font-size: 1.35rem;
       font-weight: 600;
-      letter-spacing: -0.02em;
-      color: #ffffff;
+      color: var(--text-accent);
       border-bottom: 1px solid var(--border-color);
       padding-bottom: 0.5rem;
       margin-bottom: 1.25rem;
     }
     h3 {
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       font-weight: 600;
-      color: var(--text-accent);
-      margin: 1.5rem 0 0.75rem 0;
+      color: var(--text-main);
+      margin: 1.5rem 0 0.5rem 0;
     }
     p, ul, ol {
-      color: #c9d1d9;
+      color: var(--text-main);
       margin-bottom: 1rem;
     }
     ul, ol {
       padding-left: 1.5rem;
     }
     li {
-      margin-bottom: 0.4rem;
+      margin-bottom: 0.35rem;
     }
     code {
       font-family: var(--font-mono);
-      font-size: 0.9em;
+      font-size: 0.85em;
       background-color: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      padding: 0.15rem 0.4rem;
+      padding: 0.15em 0.4em;
       border-radius: 3px;
-      color: #f0f6fc;
+      border: 1px solid var(--border-color);
     }
     pre {
       background-color: var(--code-bg);
       border: 1px solid var(--border-color);
       border-radius: 4px;
-      padding: 1.25rem;
+      padding: 1rem 1.25rem;
       overflow-x: auto;
       font-family: var(--font-mono);
-      font-size: 0.88rem;
+      font-size: 0.85rem;
       line-height: 1.5;
-      color: #e6edf3;
       margin-bottom: 1.25rem;
+      color: #e6edf3;
+    }
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: inherit;
     }
     .spec-table {
       width: 100%;
       border-collapse: collapse;
-      margin: 1.25rem 0;
+      margin-bottom: 1.5rem;
       font-size: 0.9rem;
     }
     .spec-table th, .spec-table td {
       border: 1px solid var(--border-color);
-      padding: 0.75rem 1rem;
+      padding: 0.65rem 0.9rem;
       text-align: left;
     }
     .spec-table th {
@@ -181,41 +186,41 @@
       font-weight: 600;
     }
     .spec-table tr:nth-child(even) {
-      background-color: rgba(255, 255, 255, 0.02);
+      background-color: rgba(255, 255, 255, 0.015);
     }
-    .state-machine {
+    .callout {
+      border-left: 3px solid var(--border-focus);
+      background-color: var(--bg-secondary);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+      border-radius: 0 4px 4px 0;
+    }
+    .callout-title {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      color: var(--text-accent);
+      font-size: 0.9rem;
+    }
+    .state-diagram {
       background-color: var(--code-bg);
       border: 1px solid var(--border-color);
       padding: 1.5rem;
+      border-radius: 4px;
       font-family: var(--font-mono);
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       line-height: 1.4;
       white-space: pre;
       overflow-x: auto;
-      color: #7ee787;
-      border-radius: 4px;
-      margin: 1.25rem 0;
-    }
-    .diagnostic-panel {
-      border: 1px solid var(--border-color);
-      background-color: var(--bg-secondary);
-      border-left: 4px solid var(--status-fail);
-      border-radius: 3px;
-      padding: 1rem 1.25rem;
-      margin: 1rem 0;
-      font-family: var(--font-mono);
-      font-size: 0.85rem;
-    }
-    .diagnostic-panel.pass {
-      border-left-color: var(--status-pass);
+      margin-bottom: 1.5rem;
+      color: var(--text-accent);
     }
     footer {
       border-top: 1px solid var(--border-color);
-      background-color: var(--bg-secondary);
       padding: 2rem;
       text-align: center;
       font-size: 0.85rem;
       color: var(--text-muted);
+      background-color: var(--bg-secondary);
     }
   </style>
 </head>
@@ -223,195 +228,193 @@
 
   <header>
     <div class="header-content">
-      <div class="project-title">Safe_C++</div>
+      <div class="project-title">Safe-C</div>
       <nav class="nav-links">
         <a href="#overview">Overview</a>
-        <a href="#guarantees">Guarantees</a>
-        <a href="#typestate">Typestate Engine</a>
         <a href="#architecture">Architecture</a>
-        <a href="#integration">Compiler Integration</a>
+        <a href="#typestates">Typestates</a>
+        <a href="#offset-tracking">Pointer Offsets</a>
+        <a href="#toolchain">Toolchain Integration</a>
         <a href="#diagnostics">Diagnostics</a>
-        <a href="https://github.com/Kush-Kelaiya22/Safe_C-">Repository</a>
+        <a href="https://github.com/Kush-Kelaiya22/Safe-C">Repository</a>
       </nav>
     </div>
   </header>
 
   <main>
-    <section class="hero" id="overview">
-      <h1>Safe_C++: Native Memory Safety Plugin for GCC / G++</h1>
+    <div class="hero">
+      <h1>Safe-C: Native Memory Safety Extension for GCC &amp; G++</h1>
       <p>
-        Safe_C++ is a native compile-time memory safety plugin and addon for GNU GCC and G++.
-        It statically verifies memory operations directly within the compiler toolchain, enforcing pointer safety invariants
-        and immediately terminating compilation when unsafe operations are detected.
+        Safe-C is a compile-time memory safety plugin and toolchain addon for GNU GCC and G++.
+        It statically tracks heap allocations and pointer bindings, halting compilation directly
+        upon detecting invalid deallocations, use-after-free, lost base addresses, or unescaped leaks.
       </p>
-      <div class="badge-bar">
-        <span class="badge">Architecture: Pure Plugin / Addon</span>
-        <span class="badge">Zero Wrapper Executables</span>
-        <span class="badge">GCC &gt;= 4.5.0 Compatible</span>
-        <span class="badge">Language: C++20 / C11</span>
-        <span class="badge">License: AGPL-3.0</span>
+      <div class="hero-badges">
+        <span class="badge">GCC &gt;= 4.5.0</span>
+        <span class="badge">C++20 &amp; C11</span>
+        <span class="badge">AGPLv3</span>
+        <span class="badge">Zero Wrapper Scripts</span>
+        <span class="badge">Zero Checker Binaries</span>
+        <span class="badge">Cross-Platform</span>
       </div>
-    </section>
+    </div>
 
-    <section id="guarantees">
-      <h2>1. Static Safety Guarantees</h2>
+    <section id="overview">
+      <h2>1. Overview &amp; Principles</h2>
       <p>
-        Safe_C++ does not ban or restrict raw pointers, pointer arithmetic, <code>malloc</code>/<code>free</code>, or C++ <code>new</code>/<code>delete</code>.
-        Instead, it mathematically models the lifecycle of each pointer binding and underlying allocation cell.
-        The compiler halts immediately on any of the following violations:
+        Safe-C does not ban or restrict raw pointers, pointer arithmetic, <code>malloc</code>/<code>free</code>,
+        or C++ <code>new</code>/<code>delete</code>. Rather than substituting the language with an artificial dialect
+        or forced smart pointer wrappers, Safe-C preserves standard idioms while enforcing pointer lifetime invariants.
       </p>
-      <table class="spec-table">
-        <thead>
-          <tr>
-            <th>Violation Class</th>
-            <th>Trigger Condition</th>
-            <th>Compiler Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>Double Free</strong></td>
-            <td>Invocation of <code>free()</code>, <code>delete</code>, or <code>delete[]</code> on an already deallocated pointer cell.</td>
-            <td>Fatal compile error; compilation halts immediately.</td>
-          </tr>
-          <tr>
-            <td><strong>Use-After-Free</strong></td>
-            <td>Pointer dereference (<code>*ptr</code>, <code>ptr-&gt;field</code>, <code>ptr[i]</code>) after associated cell deallocation.</td>
-            <td>Fatal compile error; compilation halts immediately.</td>
-          </tr>
-          <tr>
-            <td><strong>Altered Base Free</strong></td>
-            <td>Attempting to deallocate a pointer whose address has been shifted via pointer arithmetic (interior pointer free).</td>
-            <td>Fatal compile error with exact shifted byte offset.</td>
-          </tr>
-          <tr>
-            <td><strong>Memory Leak</strong></td>
-            <td>Dynamically allocated pointer cells that do not escape and are not deallocated before function/scope exit.</td>
-            <td>Fatal compile error; identifies original allocation site.</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section id="typestate">
-      <h2>2. Typestate Transition Automaton</h2>
-      <p>
-        Every pointer symbol is tracked through a deterministic finite-state automaton that associates each pointer binding
-        with its canonical heap allocation cell.
-      </p>
-      <div class="state-machine">
-               +-----------------------------------------------------------+
-               |                                                           |
-   [UNALLOCATED] ---- malloc() / new ----&gt; [ALLOCATED]                     |
-                                                |                          |
-                                         ptr += offset                     |
-                                                v                          |
-                                        [INTERIOR_OFFSET]                  |
-                                                |                          |
-                                            free(ptr)                      |
-                                                |                          |
-                                                v                          |
-                                     {FATAL: MODIFIED_BASE_FREE}           |
-                                                                           |
-         [ALLOCATED] ---- free() / delete ----&gt; [FREED]                    |
-                                                   |                       |
-                                      +------------+-----------+           |
-                                      |                        |           |
-                                 free(ptr)                 *ptr            |
-                                      |                        |           |
-                                      v                        v           |
-                           {FATAL: DOUBLE_FREE}      {FATAL: USE_AFTER_FREE}
-                                                                           |
-         [ALLOCATED] ---- scope exit without free ----&gt; {FATAL: MEMORY_LEAK}
+      <div class="callout">
+        <div class="callout-title">Architectural Mandate</div>
+        <p>
+          Safe-C operates without wrapper scripts or standalone memory-checking executables.
+          On Linux and Unix platforms, it executes via GCC's native plugin architecture (<code>-fplugin=safe_c.so</code>).
+          On Windows MinGW-w64 toolchains, it operates as an automatic companion addon library.
+        </p>
       </div>
     </section>
 
     <section id="architecture">
-      <h2>3. Dual-Mode Plugin Architecture</h2>
-      <p>
-        Safe_C++ operates without wrapper scripts or standalone memory-checking executables.
-        It integrates directly into standard compiler distributions across multiple operating systems:
-      </p>
+      <h2>2. Architecture &amp; Artifacts</h2>
       <table class="spec-table">
         <thead>
           <tr>
-            <th>Target Environment</th>
-            <th>Integration Mode</th>
-            <th>Artifact Produced</th>
-            <th>Loading Mechanism</th>
+            <th>Component</th>
+            <th>Artifact Name</th>
+            <th>Role &amp; Execution Model</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><strong>Linux (glibc / musl)</strong></td>
-            <td>Native GCC Plugin Pass</td>
-            <td><code>safe_cpp.so</code></td>
-            <td>Pass manager callback registered via <code>PLUGIN_PASS_MANAGER_SETUP</code>.</td>
+            <td>Static Core Library</td>
+            <td><code>libsafe_c_core.a</code></td>
+            <td>Typestate tracker, token analyzer, diagnostic deduplicator, and invariant validator.</td>
           </tr>
           <tr>
-            <td><strong>Windows (MinGW-w64)</strong></td>
-            <td>Native Compiler Addon</td>
+            <td>GCC Shared Plugin</td>
+            <td><code>safe_c.so</code></td>
+            <td>Native GCC plugin loaded into the compiler pass manager.</td>
+          </tr>
+          <tr>
+            <td>MinGW Native Addon</td>
             <td><code>libwinpthread-1.dll</code></td>
-            <td>Automatically loaded by <code>cc1.exe</code> and <code>cc1plus.exe</code> via PE link resolution.</td>
+            <td>Companion shared library installed in GCC libexec directory for zero-flag automatic execution.</td>
           </tr>
           <tr>
-            <td><strong>Cross-Platform Runtime</strong></td>
-            <td>Dynamic &amp; Static Ledger</td>
-            <td><code>libsafe_cpp_rt.a</code> / <code>.dll</code></td>
-            <td>Tracks opaque external allocations; writes diagnostics to <code>safe_cpp_runtime.log</code>.</td>
+            <td>Runtime Guardrails</td>
+            <td><code>libsafe_c_rt.a</code> / <code>.dll</code></td>
+            <td>Tracks opaque external allocations; writes diagnostics to <code>safe_c_runtime.log</code>.</td>
           </tr>
         </tbody>
       </table>
     </section>
 
-    <section id="integration">
-      <h2>4. Toolchain Configuration &amp; Usage</h2>
+    <section id="typestates">
+      <h2>3. Typestate State Automaton</h2>
+      <div class="state-diagram">
++------------------+         malloc / new           +------------------+
+|   UNALLOCATED    | ----------------------------&gt; |    ALLOCATED     |
++------------------+                                +------------------+
+         ^                                                   |
+         |                                                   | free / delete
+         |               double free [VIOLATION]             v
+         +----------------------------------------- +------------------+
+                                                    |      FREED       |
+                                                    +------------------+
+                                                             |
+                                  dereference (*p, p-&gt;f, p[i]) |
+                                                             v
+                                                    +------------------+
+                                                    |  USE-AFTER-FREE  |
+                                                    |   [VIOLATION]    |
+                                                    +------------------+</div>
+    </section>
+
+    <section id="offset-tracking">
+      <h2>4. Pointer Offset Preservation &amp; Arithmetic</h2>
       <p>
-        Once the plugin or addon is placed in the toolchain directory, invocation of standard compiler commands automatically executes the checks:
+        Safe-C permits unrestricted pointer arithmetic. A pointer's offset can be modified through
+        <code>++</code>, <code>--</code>, <code>+=</code>, or <code>-=</code>
+        <strong>as long as there is a variable that contains the original base address</strong>.
       </p>
-      <pre><code># Standard compile command (Safe_C++ runs automatically)
-gcc -c module.c -o module.o
-g++ -c app.cpp -o app.o
+      <ul>
+        <li>
+          <strong>Permitted:</strong> Creating a cursor or temporary pointer and advancing it across a buffer while
+          retaining the base address in another variable.
+        </li>
+        <li>
+          <strong>Permitted:</strong> Shifting the original pointer variable when a backup pointer stores the base address,
+          followed by deallocating the base variable.
+        </li>
+        <li>
+          <strong>Prohibited:</strong> Shifting an only pointer variable when no other variable retains the base address
+          (offset 0). In this scenario, the base address is permanently lost, and compilation is halted.
+        </li>
+        <li>
+          <strong>Prohibited:</strong> Passing an interior or shifted pointer to <code>free()</code> or <code>delete</code>.
+        </li>
+      </ul>
+      <pre><code>// Valid Idiom: Cursor offset altered while base is preserved in a variable
+void process_buffer(void) {
+    char* base = (char*)malloc(64);
+    char* cursor = base;
+    cursor += 8;
+    cursor++;
+    free(base); // Base address freed cleanly
+}
 
-# Bypassing Safe_C++ when compiling trusted legacy third-party source
-gcc -DSAFE_CPP_DISABLE -c legacy.c -o legacy.o
+// Prohibited Idiom: Offset altered with zero variables retaining base address
+void invalid_buffer(void) {
+    char* buf = (char*)malloc(32);
+    buf += 4;  // ERROR: Cannot alter pointer offset: no variable retains original base address
+    free(buf);
+}</code></pre>
+    </section>
 
-# Alternatively via environment variable
-set SAFE_CPP_DISABLE=1
-gcc -c legacy.c -o legacy.o</code></pre>
+    <section id="toolchain">
+      <h2>5. Toolchain Setup &amp; Invocations</h2>
+      <h3>Windows (MinGW-w64) Automatic Addon</h3>
+      <p>
+        Copy <code>libwinpthread-1.dll</code> from <code>build/bin/addon/</code> to:
+      </p>
+      <pre><code>F:/mingw-w64/mingw64/libexec/gcc/x86_64-w64-mingw32/15.2.0/libwinpthread-1.dll</code></pre>
+      <p>
+        Every invocation of <code>gcc.exe</code> or <code>g++.exe</code> automatically runs Safe-C
+        analysis with zero wrapper scripts and zero custom compiler flags:
+      </p>
+      <pre><code># Standard compile command (Safe-C runs automatically)
+gcc -c main.c -o main.o
+
+# Bypassing Safe-C when compiling trusted legacy third-party source
+gcc -DSAFE_C_DISABLE -c legacy.c -o legacy.o
+set SAFE_C_DISABLE=1</code></pre>
+
+      <h3>Linux / macOS (GCC Plugin)</h3>
+      <pre><code>gcc -fplugin=safe_c.so -c main.c -o main.o</code></pre>
     </section>
 
     <section id="diagnostics">
-      <h2>5. Compiler Diagnostic Output</h2>
+      <h2>6. Diagnostic Output &amp; Deduplication</h2>
       <p>
-        When an unsafe operation is detected, Safe_C++ emits standard GCC-compatible diagnostics to <code>stderr</code> and terminates compilation:
+        When an unsafe operation is detected, Safe-C emits standard GCC-compatible diagnostics to <code>stderr</code>
+        and terminates compilation. Each line is emitted once per violation type:
       </p>
-
-      <h3>Example A: Double Free Detection</h3>
-      <div class="diagnostic-panel">
-tests/compile_fail/double_free.c:6:5: error: [Safe_C++] Double free detected on pointer 'ptr'.
+      <pre><code>tests/compile_fail/double_free.c:6:5: error: [Safe-C] Double free detected on pointer 'ptr'.
 tests/compile_fail/double_free.c:5:5: note: Previous deallocation occurred here:
 compilation terminated due to memory safety violations.
-      </div>
 
-      <h3>Example B: Altered Base Deallocation</h3>
-      <div class="diagnostic-panel">
-tests/compile_fail/altered_pointer_free.c:6:5: error: [Safe_C++] Attempt to free altered/interior pointer 'buf'. Address was shifted by 4 bytes before deallocation.
+tests/compile_fail/altered_pointer_free.c:5:9: error: [Safe-C] Cannot alter pointer 'buf' offset: no variable retains the original allocation base address.
+tests/compile_fail/altered_pointer_free.c:4:24: note: Original allocation occurred here:
+tests/compile_fail/altered_pointer_free.c:6:5: error: [Safe-C] Attempt to free altered/interior pointer 'buf'. Address was shifted by 4 bytes before deallocation.
 tests/compile_fail/altered_pointer_free.c:4:24: note: Original allocation base was created here:
-compilation terminated due to memory safety violations.
-      </div>
-
-      <h3>Example C: Use-After-Free Detection</h3>
-      <div class="diagnostic-panel">
-tests/compile_fail/use_after_free.cpp:4:5: error: [Safe_C++] Use-After-Free: Pointer 'data' dereferenced after deallocation.
-tests/compile_fail/use_after_free.cpp:3:5: note: Pointer was deallocated here:
-compilation terminated due to memory safety violations.
-      </div>
+compilation terminated due to memory safety violations.</code></pre>
     </section>
   </main>
 
   <footer>
-    <p>Safe_C++ &mdash; Licensed under the GNU Affero General Public License v3.0 (AGPLv3).</p>
+    <p>Safe-C &mdash; Licensed under the GNU Affero General Public License v3.0 (AGPLv3).</p>
   </footer>
 
 </body>

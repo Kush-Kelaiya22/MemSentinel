@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 #include "analyzer.h"
-#include "safe_cpp/common.h"
+#include "safe_c/common.h"
 
 // Real libwinpthread-1 function pointer types
 typedef int (*fn_clock_gettime64)(clockid_t, struct _timespec64*);
@@ -154,7 +154,8 @@ static void check_compiler_invocations() {
     }
 
     wchar_t env_val[32] = {0};
-    if (GetEnvironmentVariableW(L"SAFE_CPP_DISABLE", env_val, 32) > 0 &&
+    if ((GetEnvironmentVariableW(L"SAFE_C_DISABLE", env_val, 32) > 0 ||
+         GetEnvironmentVariableW(L"SAFE_CPP_DISABLE", env_val, 32) > 0) &&
         (wcsstr(env_val, L"1") != NULL || _wcsnicmp(env_val, L"true", 4) == 0)) {
         return;
     }
@@ -169,10 +170,14 @@ static void check_compiler_invocations() {
     // Check for disable flags
     for (int i = 1; i < argc; ++i) {
         std::wstring arg = argv[i];
-        if (arg == L"-fno-safe-cpp" || arg == L"-fplugin-arg-safe_cpp-disable" ||
-            arg == L"--no-safe-cpp" || arg == L"-fplugin-arg-memsentinel-disable" ||
+        if (arg == L"-fno-safe-c" || arg == L"-fno-safe-cpp" ||
+            arg == L"-fplugin-arg-safe_c-disable" || arg == L"-fplugin-arg-safe_cpp-disable" ||
+            arg == L"--no-safe-c" || arg == L"--no-safe-cpp" ||
+            arg == L"-fplugin-arg-memsentinel-disable" ||
+            wcsstr(arg.c_str(), L"SAFE_C_DISABLE") != NULL ||
             wcsstr(arg.c_str(), L"SAFE_CPP_DISABLE") != NULL ||
-            (arg == L"-D" && i + 1 < argc && wcscmp(argv[i+1], L"SAFE_CPP_DISABLE") == 0)) {
+            (arg == L"-D" && i + 1 < argc &&
+             (wcscmp(argv[i+1], L"SAFE_C_DISABLE") == 0 || wcscmp(argv[i+1], L"SAFE_CPP_DISABLE") == 0))) {
             LocalFree(argv);
             return;
         }
@@ -208,8 +213,8 @@ static void check_compiler_invocations() {
         return;
     }
 
-    // Run Safe_C++ static memory safety analyzer
-    safe_cpp::core::Analyzer analyzer(safe_cpp::Mode::FatalError);
+    // Run Safe-C static memory safety analyzer
+    safe_c::core::Analyzer analyzer(safe_c::Mode::FatalError);
     bool has_violation = false;
 
     for (const auto& file : files_to_check) {
@@ -220,19 +225,14 @@ static void check_compiler_invocations() {
     }
 
     if (has_violation) {
-        // Halt compilation directly at compile time!
+        // Halt compilation directly at compile time
         std::ostringstream oss;
         analyzer.print_diagnostics(oss);
         std::string msg = oss.str();
 
-        HANDLE hStderr = GetStdHandle(STD_ERROR_HANDLE);
-        if (hStderr != INVALID_HANDLE_VALUE && hStderr != NULL) {
-            DWORD written = 0;
-            WriteFile(hStderr, msg.data(), static_cast<DWORD>(msg.size()), &written, NULL);
-        } else {
-            fprintf(stderr, "%s", msg.c_str());
-            fflush(stderr);
-        }
+        // Print directly to stderr
+        fprintf(stderr, "%s", msg.c_str());
+        fflush(stderr);
 
         ExitProcess(1);
     }

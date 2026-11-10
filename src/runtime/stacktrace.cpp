@@ -11,7 +11,7 @@
   #include <dlfcn.h>
 #endif
 
-namespace memcheck::rt {
+namespace safe_c::rt {
 
 std::vector<StackFrame> capture_stacktrace(size_t max_frames, size_t skip_frames) {
     std::vector<StackFrame> result;
@@ -67,4 +67,4 @@ std::string format_stacktrace(const std::vector<StackFrame>& frames) {
     return ss.str();
 }
 
-} // namespace memcheck::rt
+} // namespace safe_c::rt

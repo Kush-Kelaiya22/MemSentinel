@@ -1,7 +1,7 @@
-#ifndef MEMCHECK_RUNTIME_LEDGER_H
-#define MEMCHECK_RUNTIME_LEDGER_H
+#ifndef SAFE_C_RUNTIME_LEDGER_H
+#define SAFE_C_RUNTIME_LEDGER_H
 
-#include "memcheck/common.h"
+#include "safe_c/common.h"
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -9,7 +9,7 @@
 #include <optional>
 #include <vector>
 
-namespace memcheck::rt {
+namespace safe_c::rt {
 
 struct RuntimeBlock {
     uintptr_t base_address{0};
@@ -37,6 +37,14 @@ private:
     std::unordered_map<uintptr_t, RuntimeBlock> blocks_;
 };
 
-} // namespace memcheck::rt
+} // namespace safe_c::rt
 
-#endif // MEMCHECK_RUNTIME_LEDGER_H
+namespace safe_cpp::rt {
+    using namespace safe_c::rt;
+}
+
+namespace memcheck::rt {
+    using namespace safe_c::rt;
+}
+
+#endif // SAFE_C_RUNTIME_LEDGER_H

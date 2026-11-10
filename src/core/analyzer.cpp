@@ -4,7 +4,7 @@
 #include <regex>
 #include <cctype>
 
-namespace safe_cpp::core {
+namespace safe_c::core {
 
 namespace {
 
@@ -142,7 +142,7 @@ Analyzer::Analyzer(Mode mode) : mode_(mode) {}
 bool Analyzer::analyze_file(const std::string& filepath) {
     std::ifstream file(filepath, std::ios::in | std::ios::binary);
     if (!file.is_open()) {
-        std::cerr << "memcheck: fatal error: cannot open file: " << filepath << "\n";
+        std::cerr << "safe-c: fatal error: cannot open file: " << filepath << "\n";
         return false;
     }
     std::ostringstream ss;
@@ -157,6 +157,16 @@ void Analyzer::record_violation(
     SourceLocation note_loc,
     std::string note_msg
 ) {
+    // Deduplication: ensure 1 particular line is shown once only for a given error type.
+    // If the same line has a different error, it is recorded and displayed.
+    for (const auto& existing : diagnostics_) {
+        if (existing.error_loc.filename == err_loc.filename &&
+            existing.error_loc.line == err_loc.line &&
+            existing.type == type) {
+            return;
+        }
+    }
+
     diagnostics_.push_back(Diagnostic{
         type,
         std::move(err_loc),
@@ -191,12 +201,13 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                     record_violation(
                         ViolationType::MemoryLeakUnfreed,
                         tok.loc,
-                        "[Safe_C++] Memory leak detected: dynamically allocated pointer '" + symbol + "' was not freed before exiting scope.",
+                        "[Safe-C] Memory leak detected: dynamically allocated pointer '" + symbol + "' was not freed before exiting scope.",
                         cell->alloc_site,
                         "Memory was allocated here and never freed:"
                     );
                 }
                 scope_depth = 0;
+                state_.clear();
             }
             continue;
         }
@@ -225,11 +236,12 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                     record_violation(
                         ViolationType::MemoryLeakUnfreed,
                         tok.loc,
-                        "[Safe_C++] Memory leak: Pointer '" + symbol + "' allocated on heap is not deallocated before return.",
+                        "[Safe-C] Memory leak: Pointer '" + symbol + "' allocated on heap is not deallocated before return.",
                         cell->alloc_site,
                         "Original allocation occurred here:"
                     );
                 }
+                state_.clear();
             }
             continue;
         }
@@ -278,33 +290,73 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
             continue;
         }
 
-        // 2. Detect pointer assignment / alias: q = p;
+        // 2. Detect pointer assignment / alias: q = p; or q = p + 4;
         if (tok.text == "=" && i > 0 && i + 1 < num_tokens) {
             std::string lhs = tokens[i - 1].text;
             std::string rhs = tokens[i + 1].text;
-            if (state_.has_symbol(rhs)) {
-                state_.register_alias(lhs, rhs, 0);
+            if (lhs != rhs && state_.has_symbol(rhs)) {
+                int64_t offset_delta = 0;
+                if (i + 3 < num_tokens && (tokens[i + 2].text == "+" || tokens[i + 2].text == "-")) {
+                    try {
+                        int64_t val = std::stoll(tokens[i + 3].text);
+                        offset_delta = (tokens[i + 2].text == "+") ? val : -val;
+                    } catch (...) {}
+                }
+                state_.register_alias(lhs, rhs, offset_delta);
             }
         }
 
         // 3. Pointer arithmetic tracking with architecture-adaptive word stride
         const int64_t arch_stride = static_cast<int64_t>(sizeof(void*));
-        if (tok.text == "++" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
-            state_.apply_pointer_arithmetic(tokens[i - 1].text, arch_stride);
-        } else if (tok.text == "--" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
-            state_.apply_pointer_arithmetic(tokens[i - 1].text, -arch_stride);
+        auto check_and_apply_arithmetic = [&](const std::string& sym, int64_t delta, const SourceLocation& loc) {
+            if (!state_.has_symbol(sym)) return;
+            const auto* binding = state_.get_binding(sym);
+            if (!binding || !binding->cell()) return;
+
+            // Offset can be changed as long as there is a variable that contains the original base address
+            if (!state_.can_alter_offset(sym, delta)) {
+                record_violation(
+                    ViolationType::ModifiedBaseFree,
+                    loc,
+                    "[Safe-C] Cannot alter pointer '" + sym + "' offset: no variable retains the original allocation base address.",
+                    binding->cell()->alloc_site,
+                    "Original allocation occurred here:"
+                );
+            }
+            state_.apply_pointer_arithmetic(sym, delta);
+        };
+
+        if (tok.text == "++") {
+            if (i > 0 && state_.has_symbol(tokens[i - 1].text)) {
+                check_and_apply_arithmetic(tokens[i - 1].text, arch_stride, tok.loc);
+            } else if (i + 1 < num_tokens && state_.has_symbol(tokens[i + 1].text)) {
+                check_and_apply_arithmetic(tokens[i + 1].text, arch_stride, tok.loc);
+            }
+        } else if (tok.text == "--") {
+            if (i > 0 && state_.has_symbol(tokens[i - 1].text)) {
+                check_and_apply_arithmetic(tokens[i - 1].text, -arch_stride, tok.loc);
+            } else if (i + 1 < num_tokens && state_.has_symbol(tokens[i + 1].text)) {
+                check_and_apply_arithmetic(tokens[i + 1].text, -arch_stride, tok.loc);
+            }
         } else if (tok.text == "+=" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
             int64_t val = arch_stride;
             if (i + 1 < num_tokens) {
                 try { val = std::stoll(tokens[i + 1].text); } catch (...) {}
             }
-            state_.apply_pointer_arithmetic(tokens[i - 1].text, val);
+            check_and_apply_arithmetic(tokens[i - 1].text, val, tok.loc);
         } else if (tok.text == "-=" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
             int64_t val = arch_stride;
             if (i + 1 < num_tokens) {
                 try { val = std::stoll(tokens[i + 1].text); } catch (...) {}
             }
-            state_.apply_pointer_arithmetic(tokens[i - 1].text, -val);
+            check_and_apply_arithmetic(tokens[i - 1].text, -val, tok.loc);
+        } else if (tok.text == "=" && i > 0 && i + 3 < num_tokens &&
+                   tokens[i - 1].text == tokens[i + 1].text && state_.has_symbol(tokens[i - 1].text) &&
+                   (tokens[i + 2].text == "+" || tokens[i + 2].text == "-")) {
+            int64_t val = arch_stride;
+            try { val = std::stoll(tokens[i + 3].text); } catch (...) {}
+            int64_t delta = (tokens[i + 2].text == "+") ? val : -val;
+            check_and_apply_arithmetic(tokens[i - 1].text, delta, tok.loc);
         }
 
         // 4. Detect deallocation: free(ptr), delete ptr, delete[] ptr
@@ -319,7 +371,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                     record_violation(
                         ViolationType::DoubleFree,
                         tok.loc,
-                        "[Safe_C++] Double free detected on pointer '" + target_sym + "'.",
+                        "[Safe-C] Double free detected on pointer '" + target_sym + "'.",
                         cell ? cell->free_site : SourceLocation{},
                         "Previous deallocation occurred here:"
                     );
@@ -327,7 +379,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                     record_violation(
                         ViolationType::ModifiedBaseFree,
                         tok.loc,
-                        "[Safe_C++] Attempt to free altered/interior pointer '" + target_sym + "'. Address was shifted by " +
+                        "[Safe-C] Attempt to free altered/interior pointer '" + target_sym + "'. Address was shifted by " +
                             std::to_string(offset) + " bytes before deallocation.",
                         cell ? cell->alloc_site : SourceLocation{},
                         "Original allocation base was created here:"
@@ -354,7 +406,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                         record_violation(
                             ViolationType::DoubleFree,
                             tok.loc,
-                            "[Safe_C++] Double free / delete detected on pointer '" + target_sym + "'.",
+                            "[Safe-C] Double free / delete detected on pointer '" + target_sym + "'.",
                             cell ? cell->free_site : SourceLocation{},
                             "Pointer was previously deleted here:"
                         );
@@ -362,7 +414,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                         record_violation(
                             ViolationType::ModifiedBaseFree,
                             tok.loc,
-                            "[Safe_C++] Attempt to delete pointer '" + target_sym + "' with modified base offset (offset = " +
+                            "[Safe-C] Attempt to delete pointer '" + target_sym + "' with modified base offset (offset = " +
                                 std::to_string(offset) + ").",
                             cell ? cell->alloc_site : SourceLocation{},
                             "Original allocation occurred here:"
@@ -381,7 +433,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 record_violation(
                     ViolationType::UseAfterFree,
                     tok.loc,
-                    "[Safe_C++] Use-After-Free: Pointer '" + tokens[i + 1].text + "' dereferenced after deallocation.",
+                    "[Safe-C] Use-After-Free: Pointer '" + tokens[i + 1].text + "' dereferenced after deallocation.",
                     cell ? cell->free_site : SourceLocation{},
                     "Pointer was deallocated here:"
                 );
@@ -393,7 +445,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 record_violation(
                     ViolationType::UseAfterFree,
                     tok.loc,
-                    "[Safe_C++] Use-After-Free: Accessing member on freed pointer '" + tokens[i - 1].text + "'.",
+                    "[Safe-C] Use-After-Free: Accessing member on freed pointer '" + tokens[i - 1].text + "'.",
                     cell ? cell->free_site : SourceLocation{},
                     "Pointer was deallocated here:"
                 );
@@ -405,7 +457,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 record_violation(
                     ViolationType::UseAfterFree,
                     tok.loc,
-                    "[Safe_C++] Use-After-Free: Array subscript index on freed pointer '" + tokens[i - 1].text + "'.",
+                    "[Safe-C] Use-After-Free: Array subscript index on freed pointer '" + tokens[i - 1].text + "'.",
                     cell ? cell->free_site : SourceLocation{},
                     "Pointer was deallocated here:"
                 );
@@ -431,4 +483,4 @@ void Analyzer::print_diagnostics(std::ostream& os) const {
     }
 }
 
-} // namespace safe_cpp::core
+} // namespace safe_c::core

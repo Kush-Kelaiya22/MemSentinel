@@ -1,5 +1,5 @@
-#ifndef MEMCHECK_CORE_ANALYZER_H
-#define MEMCHECK_CORE_ANALYZER_H
+#ifndef SAFE_C_CORE_ANALYZER_H
+#define SAFE_C_CORE_ANALYZER_H
 
 #include "pointer_state.h"
 #include <string>
@@ -7,7 +7,7 @@
 #include <string_view>
 #include <iostream>
 
-namespace safe_cpp::core {
+namespace safe_c::core {
 
 struct Diagnostic {
     ViolationType type;
@@ -63,10 +63,14 @@ private:
     std::vector<Diagnostic> diagnostics_;
 };
 
-} // namespace safe_cpp::core
+} // namespace safe_c::core
 
-namespace memcheck::core {
-    using namespace safe_cpp::core;
+namespace safe_cpp::core {
+    using namespace safe_c::core;
 }
 
-#endif // MEMCHECK_CORE_ANALYZER_H
+namespace memcheck::core {
+    using namespace safe_c::core;
+}
+
+#endif // SAFE_C_CORE_ANALYZER_H

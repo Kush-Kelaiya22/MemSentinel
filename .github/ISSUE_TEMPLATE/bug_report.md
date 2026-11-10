@@ -1,28 +1,28 @@
 ---
 name: Bug Report
-about: Create a report to help us improve MemCheck
+about: Create a report to help us improve Safe-C
 title: '[BUG] '
-labels: 'bug'
+labels: bug
 assignees: ''
 ---
 
-**Describe the Bug**
+**Describe the Bug:**
 A clear and concise description of what the bug is.
 
-**Source Code Triggering the Issue**
+**Source Code to Reproduce:**
 ```c
-// Paste minimal reproducing C/C++ snippet here
+// Paste minimal reproducing C/C++ source code here
 ```
 
-**Expected Behavior**
-Whether this should have triggered a compile-time rejection or runtime guardrail, or if it was a false positive.
+**Environment:**
+- OS: [e.g. Windows 11, Ubuntu 24.04]
+- GCC Version: [e.g. GCC 15.2.0]
+- Command Line Invocation: [e.g. `gcc -c main.c` or `gcc -fplugin=safe_c.so -c main.c`]
 
-**Compiler Environment:**
-- OS: [e.g. Windows 11 with MinGW-w64, Ubuntu 22.04]
-- GCC/G++ Version: [e.g. GCC 13.2.0, GCC 15.2.0]
-- Command Line Invocation: [e.g. `gcc -fplugin=memcheck_plugin.dll -c main.c`]
+**Observed Output:**
+```
+Paste compiler diagnostic output or safe_c_runtime.log here
+```
 
-**Log Output (`memcheck_runtime.log` or compiler diagnostic output):**
-```
-Paste log output here
-```
+**Expected Behavior:**
+A clear and concise description of what you expected to happen.

@@ -1,55 +1,64 @@
-# Safe_C++: Native Compile-Time Memory Safety Plugin for GCC / G++
+# Safe-C: Native Compile-Time Memory Safety Extension for GCC & G++
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
 [![GCC Compatibility](https://img.shields.io/badge/GCC-%3E%3D%204.5.0-success.svg)](https://gcc.gnu.org/)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
-[![Documentation](https://img.shields.io/badge/Docs-GitHub%20Pages-brightgreen.svg)](https://kush-kelaiya22.github.io/Safe_C-/)
+[![Documentation](https://img.shields.io/badge/Docs-GitHub%20Pages-brightgreen.svg)](https://kush-kelaiya22.github.io/Safe-C/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20MinGW%20%7C%20Linux%20%7C%20macOS-brightgreen.svg)]()
 
-> **Safe_C++** is a native compile-time memory safety plugin and runtime guardrail extension for GCC and G++. It enforces memory safety by **halting compilation directly at compile time** before vulnerable binaries can ever be produced.
->
-> **Pure Native Plugin Architecture:** Zero wrapper scripts and zero memory-checking executables. Operates strictly as a compiler plugin and native toolchain addon. Unrestricted raw pointers, pointer arithmetic, `malloc`/`free`, and `new`/`delete` are fully supported without any language subsetting.
+Safe-C is a compile-time memory safety plugin and toolchain addon for GCC and G++. It enforces memory safety by halting compilation directly at compile time before memory-unsafe binaries can be produced.
+
+**Pure Native Toolchain Integration:** Operates strictly as a compiler plugin and companion toolchain addon—no executable checker binaries and no shell wrapper scripts. Standard raw pointers, pointer arithmetic, `malloc`/`free`, and `new`/`delete` are fully supported without language subsetting.
 
 ---
 
-## Online Documentation
+## Documentation
 
-Comprehensive single-page technical documentation and specifications are available at the [Safe_C++ Documentation Portal](https://kush-kelaiya22.github.io/Safe_C-/).
+The authoritative single-page technical specification and reference manual is published on [GitHub Pages](https://kush-kelaiya22.github.io/Safe-C/).
 
 ---
 
 ## Safety Invariants Enforced
 
-Safe_C++ models pointer typestates directly during compiler execution:
+Safe-C verifies typestates and allocation bounds during compilation:
 
-- **Double Free:** Deallocation (`free`, `delete`, `delete[]`, `realloc`) on an already freed address halts compilation with fatal diagnostic errors.
-- **Use-After-Free (UAF):** Dereferencing (`*ptr`, `ptr->field`, `ptr[i]`) or reading freed pointers terminates compilation immediately.
-- **Altered Base Deallocation:** Shifting pointer addresses via arithmetic (`p += 4; free(p);`) and attempting to free an interior offset is caught at compile time with exact byte offset diagnostics.
-- **Memory Leaks:** Unescaped dynamic heap allocations reaching scope exit without deallocation halt compilation with fatal errors.
-- **Runtime Guardrails:** For dynamic or opaque external calls, `libsafe_cpp_rt` logs detailed diagnostic records into `safe_cpp_runtime.log`.
+- **Double Free:** Deallocation (`free`, `delete`, `delete[]`, `realloc`) on an already freed pointer halts compilation immediately.
+- **Use-After-Free:** Dereferencing (`*ptr`, `ptr->field`, `ptr[i]`) or reading freed pointers terminates compilation immediately with source locations of both the free site and access site.
+- **Pointer Offset Preservation:** A pointer's offset can be modified through pointer arithmetic (`++`, `--`, `+=`, `-=`) as long as there is a variable that contains the original base address. Altering an offset when no variable retains the base address halts compilation to prevent permanent loss of the deallocation target.
+- **Modified Base Deallocation:** Attempting to deallocate an interior or shifted pointer halts compilation with byte offset diagnostics.
+- **Memory Leaks:** Dynamic heap allocations remaining unescaped and unfreed at scope exit halt compilation with fatal errors.
+- **Diagnostic Deduplication:** Each diagnostic line is emitted once per error type to ensure clear, uncluttered compiler diagnostics.
+- **Runtime Guardrails:** For dynamic or opaque external library boundaries, `libsafe_c_rt` records allocation metadata and logs violations to `safe_c_runtime.log`.
 
 ---
 
-## Toolchain Integration
+## Toolchain Setup
 
 ### Windows (MinGW-w64)
-Place `libwinpthread-1.dll` in your GCC libexec directory (`libexec/gcc/<target>/<version>/`).
-All subsequent invocations of `gcc` and `g++` automatically execute Safe_C++ static checks without any wrappers or manual flags!
+Copy `libwinpthread-1.dll` from `build/bin/addon/` into the GCC libexec directory:
+```
+<mingw-root>/libexec/gcc/x86_64-w64-mingw32/<version>/libwinpthread-1.dll
+```
+Subsequent invocations of `gcc` and `g++` run Safe-C static analysis automatically with zero wrapper scripts and zero custom compiler flags.
 
 ### Linux & macOS
-Pass `-fplugin=safe_cpp.so` or configure default GCC specs.
+Pass the plugin argument or place the spec file into your GCC specs directory:
+```bash
+gcc -fplugin=safe_c.so -c main.c -o main.o
+```
 
 ---
 
 ## Disabling On Demand
 
-For compiling trusted legacy third-party source files:
-```bash
-# Via compiler flag
-gcc -DSAFE_CPP_DISABLE -c legacy.c -o legacy.o
+Safe-C static analysis can be disabled per invocation or per environment:
 
-# Or via environment variable
-export SAFE_CPP_DISABLE=1
+```bash
+# Via compiler macro
+gcc -DSAFE_C_DISABLE -c legacy.c -o legacy.o
+
+# Via environment variable
+export SAFE_C_DISABLE=1
 gcc -c legacy.c -o legacy.o
 ```
 
@@ -58,8 +67,8 @@ gcc -c legacy.c -o legacy.o
 ## Building from Source
 
 ```bash
-git clone https://github.com/Kush-Kelaiya22/Safe_C-.git
-cd Safe_C-
+git clone https://github.com/Kush-Kelaiya22/Safe-C.git
+cd Safe-C
 
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
@@ -71,4 +80,4 @@ ctest --test-dir build --output-on-failure
 
 ## License
 
-Safe_C++ is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**. See [LICENSE](LICENSE) for details.
+Safe-C is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**. See [LICENSE](LICENSE) for details.

@@ -1,11 +1,11 @@
-#ifndef MEMCHECK_RUNTIME_LOGGER_H
-#define MEMCHECK_RUNTIME_LOGGER_H
+#ifndef SAFE_C_RUNTIME_LOGGER_H
+#define SAFE_C_RUNTIME_LOGGER_H
 
-#include "memcheck/common.h"
+#include "safe_c/common.h"
 #include "stacktrace.h"
 #include <string>
 
-namespace memcheck::rt {
+namespace safe_c::rt {
 
 struct LogEntry {
     ViolationType violation;
@@ -33,9 +33,17 @@ private:
     Logger();
     ~Logger() = default;
 
-    std::string log_filepath_{"memcheck_runtime.log"};
+    std::string log_filepath_{"safe_c_runtime.log"};
 };
 
-} // namespace memcheck::rt
+} // namespace safe_c::rt
 
-#endif // MEMCHECK_RUNTIME_LOGGER_H
+namespace safe_cpp::rt {
+    using namespace safe_c::rt;
+}
+
+namespace memcheck::rt {
+    using namespace safe_c::rt;
+}
+
+#endif // SAFE_C_RUNTIME_LOGGER_H
