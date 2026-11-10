@@ -1,0 +1,12 @@
+# MemCheck GCC Plugin Auto-Loading Specs File
+# This file instructs GCC/G++ to load the MemCheck plugin by default for all compilations.
+# To disable MemCheck, pass -fplugin-arg-memcheck-disable to gcc/g++.
+
+*cc1_options:
++ %{!fplugin-arg-memcheck-disable:-fplugin=memcheck}
+
+*cc1plus_options:
++ %{!fplugin-arg-memcheck-disable:-fplugin=memcheck}
+
+*link:
++ %{!fplugin-arg-memcheck-disable:%{!nodefaultlibs:%{!nostdlib:-lmemcheck_rt}}}
