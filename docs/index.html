@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MemSentinel — Compile-Time Memory Safety for GCC/G++</title>
+  <meta name="description" content="High-precision compile-time memory safety plugin and runtime guardrails for GCC and G++. Pure plugin architecture with zero wrappers.">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --accent: #58a6ff;
+      --accent-glow: rgba(88, 166, 255, 0.15);
+      --success: #3fb950;
+      --danger: #f85149;
+      --warning: #d29922;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --code-bg: #090d13;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      border-bottom: 1px solid var(--border);
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo {
+      font-weight: 700;
+      font-size: 1.3rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      color: #fff;
+    }
+    .logo-badge {
+      font-size: 0.75rem;
+      background: var(--accent-glow);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+    }
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      list-style: none;
+      font-size: 0.95rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      text-decoration: none !important;
+    }
+    .btn-primary {
+      background: #238636;
+      color: #fff;
+      border: 1px solid rgba(240, 246, 252, 0.1);
+    }
+    .btn-primary:hover { background: #2ea043; }
+    .btn-secondary {
+      background: var(--card-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: #21262d; border-color: var(--text-muted); }
+    .hero {
+      max-width: 1000px;
+      margin: 4rem auto 3rem auto;
+      padding: 0 1.5rem;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 1.25rem;
+      background: linear-gradient(135deg, #ffffff 40%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 1.25rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 2.5rem;
+      flex-wrap: wrap;
+    }
+    .badges-row {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.25rem 0.6rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .badge strong { color: var(--text); }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    .section-title {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+    .section-subtitle {
+      color: var(--text-muted);
+      margin-bottom: 2.5rem;
+      font-size: 1.05rem;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.75rem;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+    }
+    .card-icon {
+      font-size: 1.75rem;
+      margin-bottom: 1rem;
+      display: inline-block;
+    }
+    .card h3 {
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+    }
+    .card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .code-comment { color: #8b949e; }
+    .code-error { color: #f85149; font-weight: 600; }
+    .code-note { color: #58a6ff; }
+    .code-keyword { color: #ff7b72; }
+    .code-fn { color: #d2a8ff; }
+    .arch-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 2rem;
+      margin: 2rem 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .arch-flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      align-items: center;
+      text-align: center;
+    }
+    .arch-step {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 1.25rem;
+      border-radius: 6px;
+    }
+    .arch-step h4 { font-size: 1rem; margin-bottom: 0.4rem; color: var(--accent); }
+    .arch-step p { font-size: 0.85rem; color: var(--text-muted); }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 3rem 1.5rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 4rem;
+    }
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="nav-container">
+      <div class="logo">
+        🛡️ MemSentinel
+        <span class="logo-badge">v1.0.0</span>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#installation">Installation</a></li>
+        <li><a href="#examples">Examples</a></li>
+        <li><a href="https://github.com/Kush-Kelaiya22/MemSentinel/discussions">Discussions</a></li>
+        <li><a href="https://github.com/Kush-Kelaiya22/MemSentinel" class="btn btn-secondary">GitHub</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Compile-Time Memory Safety<br>for C and C++</h1>
+      <p>
+        MemSentinel is a pure native GCC/G++ plugin that stops compilation immediately when memory bugs are detected.
+        Zero wrappers, zero scripts. Standard raw pointers and pointer arithmetic fully supported.
+      </p>
+
+      <div class="hero-actions">
+        <a href="#installation" class="btn btn-primary">Get Started</a>
+        <a href="https://github.com/Kush-Kelaiya22/MemSentinel/releases" class="btn btn-secondary">Download v1.0.0</a>
+      </div>
+
+      <div class="badges-row">
+        <span class="badge">⚖️ License: <strong>AGPL-3.0</strong></span>
+        <span class="badge">⚡ Compatibility: <strong>GCC &gt;= 4.5.0</strong></span>
+        <span class="badge">🌐 Arch: <strong>x86_64, AArch64, i686, RISC-V</strong></span>
+        <span class="badge">💻 OS: <strong>Windows (MinGW), Linux, macOS</strong></span>
+      </div>
+    </section>
+
+    <section id="features" class="container">
+      <h2 class="section-title">Enforced Safety Guarantees</h2>
+      <p class="section-subtitle">MemSentinel performs intra-procedural GIMPLE SSA typestate analysis directly inside GCC.</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <span class="card-icon">🛑</span>
+          <h3>Double Free Rejection</h3>
+          <p>Instantly aborts compilation if <code>free()</code> or <code>delete</code> is invoked on a pointer already marked as deallocated along any control-flow path.</p>
+        </div>
+
+        <div class="card">
+          <span class="card-icon">⚠️</span>
+          <h3>Use-After-Free (UAF)</h3>
+          <p>Dereferencing (<code>*ptr</code>), array indexing (<code>ptr[i]</code>), or member access (<code>ptr-&gt;field</code>) on freed memory causes an immediate fatal compile error.</p>
+        </div>
+
+        <div class="card">
+          <span class="card-icon">📐</span>
+          <h3>Altered Base Free Guard</h3>
+          <p>Catches pointer arithmetic before deallocation (e.g., <code>p++; free(p);</code>). Rejects attempts to deallocate interior offsets instead of original base addresses.</p>
+        </div>
+
+        <div class="card">
+          <span class="card-icon">💧</span>
+          <h3>Memory Leak Detection</h3>
+          <p>Identifies dynamically allocated heap memory whose aliases are lost or that exits function scope without being freed or escaped to caller.</p>
+        </div>
+
+        <div class="card">
+          <span class="card-icon">🚀</span>
+          <h3>Unrestricted C/C++</h3>
+          <p>Zero language restrictions. Use raw pointers, custom allocators, dynamic structures, and pointer arithmetic with complete idiomatic freedom.</p>
+        </div>
+
+        <div class="card">
+          <span class="card-icon">🛡️</span>
+          <h3>Runtime Guardrails</h3>
+          <p>Secondary runtime safety net (<code>libmemsentinel_rt</code>) catches dynamic edge cases, logging detailed forensics into <code>memcheck_runtime.log</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="container">
+      <h2 class="section-title">Architecture Pipeline</h2>
+      <p class="section-subtitle">How MemSentinel operates inside the compiler pass pipeline.</p>
+
+      <div class="arch-box">
+        <div class="arch-flow">
+          <div class="arch-step">
+            <h4>1. Source Ingestion</h4>
+            <p>Target C/C++ with unrestricted raw pointers and malloc/new.</p>
+          </div>
+          <div>➔</div>
+          <div class="arch-step">
+            <h4>2. SSA Typestate Pass</h4>
+            <p>Intra-procedural dataflow tracks allocation base &amp; offset delta.</p>
+          </div>
+          <div>➔</div>
+          <div class="arch-step">
+            <h4>3. Invariant Verification</h4>
+            <p>Enforces pointer validity before every deallocation and read.</p>
+          </div>
+          <div>➔</div>
+          <div class="arch-step">
+            <h4>4. Outcome</h4>
+            <p><span style="color:var(--danger)">error_at</span> terminates build OR binary safely emitted.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="examples" class="container">
+      <h2 class="section-title">Detection In Action</h2>
+      <p class="section-subtitle">See how the compiler reports memory unsafety before executable code is produced.</p>
+
+      <pre><code><span class="code-comment">// example.c</span>
+<span class="code-keyword">#include</span> &lt;stdlib.h&gt;
+
+<span class="code-keyword">void</span> <span class="code-fn">faulty_routine</span>() {
+    <span class="code-keyword">char</span>* buf = (<span class="code-keyword">char</span>*)<span class="code-fn">malloc</span>(32);
+    buf += 4;  <span class="code-comment">// Pointer shifted by +4 bytes!</span>
+    <span class="code-fn">free</span>(buf); <span class="code-comment">// Rejection: Attempt to free interior pointer!</span>
+}
+
+<span class="code-comment">/* Output from GCC: */</span>
+<span class="code-error">example.c:7:5: error: [MEMSENTINEL] Attempt to free altered/interior pointer 'buf'.</span>
+    7 |     free(buf);
+      |     ^~~~~~~~~
+<span class="code-note">example.c:5:17: note: Original allocation base was created here (size: 32 bytes):</span>
+    5 |     char* buf = (char*)malloc(32);
+<span class="code-note">example.c:6:5: note: Pointer address was shifted by +4 bytes prior to deallocation.</span>
+<span class="code-error">compilation terminated due to memory safety violations.</span></code></pre>
+    </section>
+
+    <section id="installation" class="container">
+      <h2 class="section-title">Installation &amp; Integration</h2>
+      <p class="section-subtitle">Pure plugin loading without wrappers. Select your environment:</p>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('mingw')">Windows (MinGW-w64)</button>
+        <button class="tab-btn" onclick="switchTab('linux')">Linux (Ubuntu / Fedora / Arch)</button>
+        <button class="tab-btn" onclick="switchTab('macos')">macOS (Homebrew GCC)</button>
+      </div>
+
+      <div id="tab-mingw" class="tab-content active">
+        <pre><code><span class="code-comment"># 1. Copy plugin to your MinGW GCC plugin directory</span>
+Copy-Item "memsentinel.dll" "$((gcc -print-file-name=plugin).Trim())\"
+
+<span class="code-comment"># 2. Drop the specs file into GCC's installation directory for auto-loading</span>
+Copy-Item "memsentinel.specs" "$((gcc -print-file-name=specs).Trim())\specs"
+
+<span class="code-comment"># Done! Every gcc/g++ call automatically runs MemSentinel.
+# To disable for specific builds:</span>
+gcc -fplugin-arg-memsentinel-disable main.c -o main.exe</code></pre>
+      </div>
+
+      <div id="tab-linux" class="tab-content">
+        <pre><code><span class="code-comment"># 1. Install to GCC plugin directory</span>
+sudo cp memsentinel.so $(gcc -print-file-name=plugin)/
+
+<span class="code-comment"># 2. Register specs for default auto-load</span>
+sudo cp memsentinel.specs $(dirname $(gcc -print-libgcc-file-name))/specs
+
+<span class="code-comment"># 3. Compile as normal</span>
+gcc -O2 main.c -o main</code></pre>
+      </div>
+
+      <div id="tab-macos" class="tab-content">
+        <pre><code><span class="code-comment"># With Homebrew GCC (gcc-13 / gcc-14)</span>
+sudo cp memsentinel.dylib $(gcc-14 -print-file-name=plugin)/
+gcc-14 -fplugin=memsentinel main.c -o main</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>
+      <strong>MemSentinel</strong> is an open-source project licensed under the <strong>AGPL-3.0</strong> License.<br>
+      Created by <a href="https://github.com/Kush-Kelaiya22">Kush Kelaiya</a>.
+      Contribute on <a href="https://github.com/Kush-Kelaiya22/MemSentinel">GitHub</a>.
+    </p>
+  </footer>
+
+  <script>
+    function switchTab(name) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('tab-' + name).classList.add('active');
+    }
+  </script>
+</body>
+</html>

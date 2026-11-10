@@ -6,43 +6,43 @@ set(RUNTIME_SOURCES
 )
 
 # Shared Runtime Library
-add_library(memcheck_rt SHARED
+add_library(memsentinel_rt SHARED
     ${RUNTIME_SOURCES}
 )
 
-target_include_directories(memcheck_rt PUBLIC
+target_include_directories(memsentinel_rt PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/include
 )
 
-target_compile_definitions(memcheck_rt PRIVATE MEMCHECK_BUILD_DLL)
+target_compile_definitions(memsentinel_rt PRIVATE MEMCHECK_BUILD_DLL)
 
-set_target_properties(memcheck_rt PROPERTIES
-    OUTPUT_NAME "memcheck_rt"
+set_target_properties(memsentinel_rt PROPERTIES
+    OUTPUT_NAME "memsentinel_rt"
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED ON
 )
 
 if(WIN32)
-    target_link_libraries(memcheck_rt PRIVATE dbghelp)
+    target_link_libraries(memsentinel_rt PRIVATE dbghelp)
 endif()
 
 # Static Runtime Library
-add_library(memcheck_rt_static STATIC
+add_library(memsentinel_rt_static STATIC
     ${RUNTIME_SOURCES}
 )
 
-target_include_directories(memcheck_rt_static PUBLIC
+target_include_directories(memsentinel_rt_static PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/include
 )
 
-set_target_properties(memcheck_rt_static PROPERTIES
-    OUTPUT_NAME "memcheck_rt"
+set_target_properties(memsentinel_rt_static PROPERTIES
+    OUTPUT_NAME "memsentinel_rt"
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED ON
 )
 
 if(WIN32)
-    target_link_libraries(memcheck_rt_static PRIVATE dbghelp)
+    target_link_libraries(memsentinel_rt_static PRIVATE dbghelp)
 endif()

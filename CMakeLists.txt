@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(memcheck
+project(memsentinel
     VERSION 1.0.0
-    DESCRIPTION "Native GCC/G++ Memory Safety Plugin with Compile-Time Enforcement and Runtime Guardrails"
+    DESCRIPTION "MemSentinel: Native GCC/G++ Memory Safety Plugin with Compile-Time Enforcement and Runtime Guardrails"
     LANGUAGES C CXX
 )
 
