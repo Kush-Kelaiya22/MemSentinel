@@ -51,7 +51,7 @@ void Logger::log_violation(const LogEntry& entry) {
     }
 
     out << "======================================================================\n"
-        << "MEMCHECK RUNTIME SAFETY VIOLATION REPORT\n"
+        << "MEMSENTINEL RUNTIME SAFETY VIOLATION REPORT\n"
         << "Timestamp      : " << get_current_iso_timestamp() << "\n"
         << "Violation Type : " << violation_name(entry.violation) << "\n"
         << "Target Address : 0x" << std::hex << reinterpret_cast<uintptr_t>(entry.target_address) << std::dec << "\n";
@@ -86,7 +86,7 @@ void Logger::log_violation(const LogEntry& entry) {
     out.flush();
 
     // Also print concise notice to stderr
-    std::cerr << "memcheck: [RUNTIME GUARDRAIL] " << violation_name(entry.violation)
+    std::cerr << "memsentinel: [RUNTIME GUARDRAIL] " << violation_name(entry.violation)
               << " detected at address 0x" << std::hex << reinterpret_cast<uintptr_t>(entry.target_address)
               << std::dec << ". Diagnostic details saved to '" << log_filepath_ << "'.\n";
 }
@@ -99,7 +99,7 @@ void Logger::log_leak_summary(size_t leak_count, size_t total_bytes) {
     if (!out.is_open()) return;
 
     out << "======================================================================\n"
-        << "MEMCHECK RUNTIME LEAK SUMMARY\n"
+        << "MEMSENTINEL RUNTIME LEAK SUMMARY\n"
         << "Timestamp       : " << get_current_iso_timestamp() << "\n"
         << "Unfreed Blocks  : " << leak_count << "\n"
         << "Total Leak Bytes: " << total_bytes << " bytes\n"

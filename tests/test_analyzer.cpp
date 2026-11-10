@@ -126,7 +126,7 @@ void test_runtime_guardrails() {
     }
     assert(content.find("DOUBLE_FREE") != std::string::npos && "Log must mention DOUBLE_FREE");
     assert(content.find("MODIFIED_BASE_FREE") != std::string::npos && "Log must mention MODIFIED_BASE_FREE");
-    assert(content.find("MEMCHECK RUNTIME LEAK SUMMARY") != std::string::npos && "Log must have leak summary");
+    assert(content.find("MEMSENTINEL RUNTIME LEAK SUMMARY") != std::string::npos && "Log must have leak summary");
 
     std::cout << "  ✓ Runtime guardrails caught dynamic violations and generated detailed log file.\n";
 

@@ -191,7 +191,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                     record_violation(
                         ViolationType::MemoryLeakUnfreed,
                         tok.loc,
-                        "[MEMCHECK] Memory leak detected: dynamically allocated pointer '" + symbol + "' was not freed before exiting scope.",
+                        "[MEMSENTINEL] Memory leak detected: dynamically allocated pointer '" + symbol + "' was not freed before exiting scope.",
                         cell->alloc_site,
                         "Memory was allocated here and never freed:"
                     );
@@ -225,7 +225,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                     record_violation(
                         ViolationType::MemoryLeakUnfreed,
                         tok.loc,
-                        "[MEMCHECK] Memory leak: Pointer '" + symbol + "' allocated on heap is not deallocated before return.",
+                        "[MEMSENTINEL] Memory leak: Pointer '" + symbol + "' allocated on heap is not deallocated before return.",
                         cell->alloc_site,
                         "Original allocation occurred here:"
                     );
@@ -287,19 +287,20 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
             }
         }
 
-        // 3. Detect pointer arithmetic: p++, p += N, p--, p -= N
+        // 3. Pointer arithmetic tracking with architecture-adaptive word stride
+        const int64_t arch_stride = static_cast<int64_t>(sizeof(void*));
         if (tok.text == "++" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
-            state_.apply_pointer_arithmetic(tokens[i - 1].text, 4);
+            state_.apply_pointer_arithmetic(tokens[i - 1].text, arch_stride);
         } else if (tok.text == "--" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
-            state_.apply_pointer_arithmetic(tokens[i - 1].text, -4);
+            state_.apply_pointer_arithmetic(tokens[i - 1].text, -arch_stride);
         } else if (tok.text == "+=" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
-            int64_t val = 4;
+            int64_t val = arch_stride;
             if (i + 1 < num_tokens) {
                 try { val = std::stoll(tokens[i + 1].text); } catch (...) {}
             }
             state_.apply_pointer_arithmetic(tokens[i - 1].text, val);
         } else if (tok.text == "-=" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
-            int64_t val = 4;
+            int64_t val = arch_stride;
             if (i + 1 < num_tokens) {
                 try { val = std::stoll(tokens[i + 1].text); } catch (...) {}
             }
@@ -318,7 +319,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                     record_violation(
                         ViolationType::DoubleFree,
                         tok.loc,
-                        "[MEMCHECK] Double free detected on pointer '" + target_sym + "'.",
+                        "[MEMSENTINEL] Double free detected on pointer '" + target_sym + "'.",
                         cell ? cell->free_site : SourceLocation{},
                         "Previous deallocation occurred here:"
                     );
@@ -326,7 +327,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                     record_violation(
                         ViolationType::ModifiedBaseFree,
                         tok.loc,
-                        "[MEMCHECK] Attempt to free altered/interior pointer '" + target_sym + "'. Address was shifted by " +
+                        "[MEMSENTINEL] Attempt to free altered/interior pointer '" + target_sym + "'. Address was shifted by " +
                             std::to_string(offset) + " bytes before deallocation.",
                         cell ? cell->alloc_site : SourceLocation{},
                         "Original allocation base was created here:"
@@ -353,7 +354,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                         record_violation(
                             ViolationType::DoubleFree,
                             tok.loc,
-                            "[MEMCHECK] Double free / delete detected on pointer '" + target_sym + "'.",
+                            "[MEMSENTINEL] Double free / delete detected on pointer '" + target_sym + "'.",
                             cell ? cell->free_site : SourceLocation{},
                             "Pointer was previously deleted here:"
                         );
@@ -361,7 +362,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                         record_violation(
                             ViolationType::ModifiedBaseFree,
                             tok.loc,
-                            "[MEMCHECK] Attempt to delete pointer '" + target_sym + "' with modified base offset (offset = " +
+                            "[MEMSENTINEL] Attempt to delete pointer '" + target_sym + "' with modified base offset (offset = " +
                                 std::to_string(offset) + ").",
                             cell ? cell->alloc_site : SourceLocation{},
                             "Original allocation occurred here:"
@@ -380,7 +381,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 record_violation(
                     ViolationType::UseAfterFree,
                     tok.loc,
-                    "[MEMCHECK] Use-After-Free: Pointer '" + tokens[i + 1].text + "' dereferenced after deallocation.",
+                    "[MEMSENTINEL] Use-After-Free: Pointer '" + tokens[i + 1].text + "' dereferenced after deallocation.",
                     cell ? cell->free_site : SourceLocation{},
                     "Pointer was deallocated here:"
                 );
@@ -392,7 +393,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 record_violation(
                     ViolationType::UseAfterFree,
                     tok.loc,
-                    "[MEMCHECK] Use-After-Free: Accessing member on freed pointer '" + tokens[i - 1].text + "'.",
+                    "[MEMSENTINEL] Use-After-Free: Accessing member on freed pointer '" + tokens[i - 1].text + "'.",
                     cell ? cell->free_site : SourceLocation{},
                     "Pointer was deallocated here:"
                 );
@@ -404,7 +405,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 record_violation(
                     ViolationType::UseAfterFree,
                     tok.loc,
-                    "[MEMCHECK] Use-After-Free: Array subscript index on freed pointer '" + tokens[i - 1].text + "'.",
+                    "[MEMSENTINEL] Use-After-Free: Array subscript index on freed pointer '" + tokens[i - 1].text + "'.",
                     cell ? cell->free_site : SourceLocation{},
                     "Pointer was deallocated here:"
                 );

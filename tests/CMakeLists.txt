@@ -4,7 +4,7 @@ add_executable(memcheck_tests
 
 target_link_libraries(memcheck_tests PRIVATE
     memcheck_core
-    memcheck_rt_static
+    memsentinel_rt_static
 )
 
 target_include_directories(memcheck_tests PRIVATE
