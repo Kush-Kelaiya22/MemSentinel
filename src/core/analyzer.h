@@ -7,7 +7,7 @@
 #include <string_view>
 #include <iostream>
 
-namespace memcheck::core {
+namespace safe_cpp::core {
 
 struct Diagnostic {
     ViolationType type;
@@ -63,6 +63,10 @@ private:
     std::vector<Diagnostic> diagnostics_;
 };
 
-} // namespace memcheck::core
+} // namespace safe_cpp::core
+
+namespace memcheck::core {
+    using namespace safe_cpp::core;
+}
 
 #endif // MEMCHECK_CORE_ANALYZER_H

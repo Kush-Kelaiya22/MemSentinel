@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(memsentinel
+project(Safe_C++
     VERSION 1.0.0
-    DESCRIPTION "MemSentinel: Native GCC/G++ Memory Safety Plugin with Compile-Time Enforcement and Runtime Guardrails"
+    DESCRIPTION "Safe_C++: Native GCC/G++ Memory Safety Plugin and Addon with Compile-Time Enforcement and Runtime Guardrails"
     LANGUAGES C CXX
 )
 
@@ -39,7 +39,7 @@ execute_process(
     ERROR_QUIET
 )
 
-if(EXISTS "${GCC_PLUGIN_DIR}/include/gcc-plugin.h")
+if(NOT WIN32 AND EXISTS "${GCC_PLUGIN_DIR}/include/gcc-plugin.h")
     message(STATUS "Found GCC plugin headers at: ${GCC_PLUGIN_DIR}")
     set(GCC_PLUGIN_INCLUDE_DIR "${GCC_PLUGIN_DIR}/include")
     set(GCC_PLUGIN_FOUND TRUE)
@@ -51,7 +51,6 @@ endif()
 enable_testing()
 
 add_subdirectory(src/core)
-add_subdirectory(src/driver)
 add_subdirectory(src/plugin)
 add_subdirectory(src/runtime)
 add_subdirectory(tests)

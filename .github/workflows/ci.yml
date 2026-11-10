@@ -1,4 +1,4 @@
-name: MemSentinel CI
+name: Safe_C++ CI
 
 on:
   push:

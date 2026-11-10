@@ -10,7 +10,7 @@
 #include <optional>
 #include <vector>
 
-namespace memcheck::core {
+namespace safe_cpp::core {
 
 // Memory Allocation Cell represents an underlying heap chunk
 struct AllocationCell {
@@ -102,6 +102,10 @@ private:
     std::vector<std::shared_ptr<AllocationCell>> all_cells_;
 };
 
-} // namespace memcheck::core
+} // namespace safe_cpp::core
+
+namespace memcheck::core {
+    using namespace safe_cpp::core;
+}
 
 #endif // MEMCHECK_CORE_POINTER_STATE_H
