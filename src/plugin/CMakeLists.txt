@@ -1,5 +1,5 @@
 add_library(safe_c_plugin SHARED
-    memcheck_plugin.cpp
+    safe_c_plugin.cpp
     gimple_pass.cpp
 )
 

@@ -1,5 +1,5 @@
-#ifndef MEMCHECK_PLUGIN_H
-#define MEMCHECK_PLUGIN_H
+#ifndef SAFE_C_PLUGIN_H
+#define SAFE_C_PLUGIN_H
 
 // C++ standard library headers MUST precede GCC system.h / gcc-plugin.h
 #include <string>
@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "memcheck/common.h"
+#include "safe_c/common.h"
 
 #ifdef HAVE_GCC_PLUGIN_HEADERS
   #include <gcc-plugin.h>
@@ -67,18 +67,26 @@ extern "C" {
     extern int plugin_is_GPL_compatible;
 }
 
-namespace memcheck::plugin {
+namespace safe_c::plugin {
 
 struct PluginConfig {
     bool enabled{true};
     Mode mode{Mode::FatalError};
-    std::string log_file{"memcheck_runtime.log"};
+    std::string log_file{"safe_c_runtime.log"};
 };
 
 extern PluginConfig g_config;
 
 void parse_plugin_arguments(int argc, struct plugin_argument *argv);
 
-} // namespace memcheck::plugin
+} // namespace safe_c::plugin
 
-#endif // MEMCHECK_PLUGIN_H
+namespace memcheck::plugin {
+    using namespace safe_c::plugin;
+}
+
+namespace safe_cpp::plugin {
+    using namespace safe_c::plugin;
+}
+
+#endif // SAFE_C_PLUGIN_H

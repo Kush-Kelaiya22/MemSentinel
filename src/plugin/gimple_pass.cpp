@@ -12,9 +12,9 @@
 
 namespace {
 
-const pass_data memcheck_pass_data = {
+const pass_data safe_c_pass_data = {
     GIMPLE_PASS,        /* type */
-    "memcheck_pass",    /* name */
+    "safe_c_pass",      /* name */
     OPTGROUP_NONE,      /* optgroup_flags */
     TV_NONE,            /* tv_id */
     PROP_gimple_any | PROP_ssa, /* properties_required */
@@ -24,17 +24,17 @@ const pass_data memcheck_pass_data = {
     0                   /* todo_flags_finish */
 };
 
-class pass_memcheck : public gimple_opt_pass {
+class pass_safe_c : public gimple_opt_pass {
 public:
-    pass_memcheck(gcc::context *ctxt)
-        : gimple_opt_pass(memcheck_pass_data, ctxt) {}
+    pass_safe_c(gcc::context *ctxt)
+        : gimple_opt_pass(safe_c_pass_data, ctxt) {}
 
     virtual bool gate(function *) override {
-        return memcheck::plugin::g_config.enabled;
+        return safe_c::plugin::g_config.enabled;
     }
 
     virtual unsigned int execute(function *fun) override {
-        return memcheck::plugin::execute_memcheck_pass(reinterpret_cast<void*>(fun));
+        return safe_c::plugin::execute_memcheck_pass(reinterpret_cast<void*>(fun));
     }
 
     virtual opt_pass *clone() override {
@@ -45,7 +45,7 @@ public:
 } // anonymous namespace
 #endif
 
-namespace memcheck::plugin {
+namespace safe_c::plugin {
 
 unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
     if (!g_config.enabled) {
@@ -56,7 +56,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
     function *fun = reinterpret_cast<function*>(gcc_fun_ptr);
     if (!fun) return 0;
 
-    memcheck::core::StateTable state;
+    safe_c::core::StateTable state;
     basic_block bb;
 
     FOR_EACH_BB_FN(bb, fun) {
@@ -84,9 +84,9 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                             auto err = state.register_free(sym_name, sloc, cell, offset);
                             if (err.has_value()) {
                                 if (*err == ViolationType::DoubleFree) {
-                                    error_at(loc, "MemSentinel: Double free detected on pointer");
+                                    error_at(loc, "[Safe-C] Double free detected on pointer");
                                 } else if (*err == ViolationType::ModifiedBaseFree) {
-                                    error_at(loc, "MemSentinel: Attempt to free interior/altered pointer (offset: %ld bytes)", (long)offset);
+                                    error_at(loc, "[Safe-C] Attempt to free interior/altered pointer (offset: %ld bytes)", (long)offset);
                                 }
                             }
                         }
@@ -132,7 +132,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                     std::shared_ptr<core::AllocationCell> cell;
                     auto err = state.validate_access(sym_name, cell);
                     if (err.has_value() && *err == ViolationType::UseAfterFree) {
-                        error_at(loc, "MemSentinel: Use-After-Free detected: dereferencing freed pointer");
+                        error_at(loc, "[Safe-C] Use-After-Free detected: dereferencing freed pointer");
                     }
                 }
             }
@@ -145,7 +145,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
         (void)symbol;
         (void)cell;
         warning_at(DECL_SOURCE_LOCATION(fun->decl), 0,
-                   "MemSentinel: memory leak detected: dynamically allocated pointer was not freed before exiting %qs",
+                   "[Safe-C] memory leak detected: dynamically allocated pointer was not freed before exiting %qs",
                    IDENTIFIER_POINTER(DECL_NAME(fun->decl)));
     }
 #else
@@ -155,10 +155,10 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
     return 0;
 }
 
-void register_memcheck_pass(const char* plugin_name) {
+void register_safe_c_pass(const char* plugin_name) {
 #ifdef HAVE_GCC_PLUGIN_HEADERS
     struct register_pass_info pass_info;
-    pass_info.pass = new pass_memcheck(g);
+    pass_info.pass = new pass_safe_c(g);
     pass_info.reference_pass_name = "ssa";
     pass_info.ref_pass_instance_number = 1;
     pass_info.pos_op = PASS_POS_INSERT_AFTER;
@@ -169,4 +169,4 @@ void register_memcheck_pass(const char* plugin_name) {
 #endif
 }
 
-} // namespace memcheck::plugin
+} // namespace safe_c::plugin

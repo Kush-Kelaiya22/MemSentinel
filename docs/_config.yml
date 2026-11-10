@@ -1,6 +1,6 @@
-title: MemSentinel
-description: High-Precision Compile-Time Memory Safety Plugin for GCC/G++
-baseurl: /MemSentinel
+title: Safe-C
+description: Native Compile-Time Memory Safety Plugin and Toolchain Addon for GCC and G++
+baseurl: /Safe-C
 url: https://kush-kelaiya22.github.io
 theme: null
 markdown: kramdown
