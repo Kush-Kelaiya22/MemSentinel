@@ -1,7 +1,7 @@
 #include "pointer_state.h"
 #include <algorithm>
 
-namespace memcheck::core {
+namespace safe_cpp::core {
 
 StateTable::StateTable(const StateTable& other)
     : next_cell_id_(other.next_cell_id_) {
@@ -152,4 +152,4 @@ bool StateTable::has_symbol(const std::string& symbol) const {
     return bindings_.find(symbol) != bindings_.end();
 }
 
-} // namespace memcheck::core
+} // namespace safe_cpp::core

@@ -1,68 +1,10 @@
 #ifndef MEMCHECK_TYPESTATE_H
 #define MEMCHECK_TYPESTATE_H
 
-#include "memcheck/common.h"
-#include <string>
-#include <vector>
-#include <unordered_set>
-#include <cstdint>
+#include "safe_cpp/typestate.h"
 
 namespace memcheck {
-
-enum class Typestate {
-    Unallocated,
-    Allocated,
-    Freed,
-    InteriorOffset,
-    Escaped,
-    Unknown
-};
-
-constexpr std::string_view typestate_name(Typestate st) noexcept {
-    switch (st) {
-        case Typestate::Unallocated:    return "UNALLOCATED";
-        case Typestate::Allocated:      return "ALLOCATED";
-        case Typestate::Freed:          return "FREED";
-        case Typestate::InteriorOffset: return "INTERIOR_OFFSET";
-        case Typestate::Escaped:        return "ESCAPED";
-        case Typestate::Unknown:        return "UNKNOWN";
-    }
-    return "INVALID";
+    using namespace safe_cpp;
 }
-
-struct SourceLocation {
-    std::string filename;
-    uint32_t line{0};
-    uint32_t column{0};
-
-    [[nodiscard]] std::string to_string() const {
-        if (filename.empty()) return "<unknown location>";
-        return filename + ":" + std::to_string(line) + ":" + std::to_string(column);
-    }
-};
-
-struct PointerRecord {
-    std::string symbol_name;
-    Typestate state{Typestate::Unallocated};
-    SourceLocation alloc_location;
-    SourceLocation free_location;
-    int64_t byte_offset{0};
-    std::string base_symbol;
-    std::unordered_set<std::string> aliases;
-
-    [[nodiscard]] bool is_allocated() const noexcept {
-        return state == Typestate::Allocated;
-    }
-
-    [[nodiscard]] bool is_freed() const noexcept {
-        return state == Typestate::Freed;
-    }
-
-    [[nodiscard]] bool has_interior_offset() const noexcept {
-        return byte_offset != 0;
-    }
-};
-
-} // namespace memcheck
 
 #endif // MEMCHECK_TYPESTATE_H

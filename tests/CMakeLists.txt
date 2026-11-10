@@ -1,25 +1,25 @@
-add_executable(memcheck_tests
+add_executable(safe_cpp_tests
     test_analyzer.cpp
 )
 
-target_link_libraries(memcheck_tests PRIVATE
-    memcheck_core
-    memsentinel_rt_static
+target_link_libraries(safe_cpp_tests PRIVATE
+    safe_cpp_core
+    safe_cpp_rt_static
 )
 
-target_include_directories(memcheck_tests PRIVATE
+target_include_directories(safe_cpp_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/src/core
     ${CMAKE_SOURCE_DIR}/src/runtime
 )
 
-target_compile_definitions(memcheck_tests PRIVATE
+target_compile_definitions(safe_cpp_tests PRIVATE
     TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
-set_target_properties(memcheck_tests PROPERTIES
+set_target_properties(safe_cpp_tests PROPERTIES
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED ON
 )
 
-add_test(NAME memcheck_unit_tests COMMAND memcheck_tests)
+add_test(NAME safe_cpp_unit_tests COMMAND safe_cpp_tests)

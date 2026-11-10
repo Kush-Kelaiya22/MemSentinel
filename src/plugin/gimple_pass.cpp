@@ -79,14 +79,14 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                             std::string sym_name = "ptr_" + std::to_string(SSA_NAME_VERSION(arg));
                             std::shared_ptr<core::AllocationCell> cell;
                             int64_t offset = 0;
-                            core::SourceLocation sloc{"source", 0, 0};
+                            memcheck::SourceLocation sloc{"source", 0, 0};
 
                             auto err = state.register_free(sym_name, sloc, cell, offset);
                             if (err.has_value()) {
                                 if (*err == ViolationType::DoubleFree) {
-                                    error_at(loc, "[MEMSENTINEL] Fatal error: Double free detected on pointer");
+                                    error_at(loc, "MemSentinel: Double free detected on pointer");
                                 } else if (*err == ViolationType::ModifiedBaseFree) {
-                                    error_at(loc, "[MEMSENTINEL] Fatal error: Attempt to free interior/altered pointer (offset: %ld bytes)", (long)offset);
+                                    error_at(loc, "MemSentinel: Attempt to free interior/altered pointer (offset: %ld bytes)", (long)offset);
                                 }
                             }
                         }
@@ -98,7 +98,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                     tree lhs = gimple_call_lhs(stmt);
                     if (lhs && TREE_CODE(lhs) == SSA_NAME) {
                         std::string sym_name = "ptr_" + std::to_string(SSA_NAME_VERSION(lhs));
-                        core::SourceLocation sloc{"source", 0, 0};
+                        memcheck::SourceLocation sloc{"source", 0, 0};
                         state.register_allocation(sym_name, sloc, 64, false);
                     }
                 }
@@ -132,7 +132,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                     std::shared_ptr<core::AllocationCell> cell;
                     auto err = state.validate_access(sym_name, cell);
                     if (err.has_value() && *err == ViolationType::UseAfterFree) {
-                        error_at(loc, "[MEMSENTINEL] Fatal error: Use-After-Free detected: dereferencing freed pointer");
+                        error_at(loc, "MemSentinel: Use-After-Free detected: dereferencing freed pointer");
                     }
                 }
             }
@@ -145,7 +145,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
         (void)symbol;
         (void)cell;
         warning_at(DECL_SOURCE_LOCATION(fun->decl), 0,
-                   "[MEMSENTINEL] Memory leak detected: dynamically allocated pointer was not freed before exiting '%s'.",
+                   "MemSentinel: memory leak detected: dynamically allocated pointer was not freed before exiting %qs",
                    IDENTIFIER_POINTER(DECL_NAME(fun->decl)));
     }
 #else

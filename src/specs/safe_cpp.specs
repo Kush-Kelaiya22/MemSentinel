@@ -1,0 +1,12 @@
+# Safe_C++ GCC Plugin Auto-Loading Specs File
+# This file instructs GCC/G++ to load the Safe_C++ plugin by default for all compilations.
+# To disable Safe_C++, pass -DSAFE_CPP_DISABLE or -fplugin-arg-safe_cpp-disable to gcc/g++.
+
+*cc1_options:
++ %{!DSAFE_CPP_DISABLE:%{!fplugin-arg-safe_cpp-disable:%{!fplugin-arg-memsentinel-disable:-fplugin=safe_cpp}}}
+
+*cc1plus_options:
++ %{!DSAFE_CPP_DISABLE:%{!fplugin-arg-safe_cpp-disable:%{!fplugin-arg-memsentinel-disable:-fplugin=safe_cpp}}}
+
+*link:
++ %{!DSAFE_CPP_DISABLE:%{!fplugin-arg-safe_cpp-disable:%{!nodefaultlibs:%{!nostdlib:-lsafe_cpp_rt}}}}
