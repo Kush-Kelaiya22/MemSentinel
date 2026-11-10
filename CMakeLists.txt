@@ -51,6 +51,7 @@ endif()
 enable_testing()
 
 add_subdirectory(src/core)
+add_subdirectory(src/driver)
 add_subdirectory(src/plugin)
 add_subdirectory(src/runtime)
 add_subdirectory(tests)

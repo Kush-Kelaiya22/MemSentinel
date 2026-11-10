@@ -1,6 +1,7 @@
 #include "stacktrace.h"
 #include <sstream>
 #include <iomanip>
+#include <cstdint>
 
 #if defined(_WIN32)
   #include <windows.h>
