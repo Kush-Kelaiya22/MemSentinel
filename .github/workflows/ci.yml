@@ -1,4 +1,4 @@
-name: MemCheck CI
+name: MemSentinel CI
 
 on:
   push:
@@ -19,33 +19,43 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
-      - name: Set up MinGW (Windows)
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          update: true
-          install: >-
-            base-devel
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-gcc-plugin-devel
-
       - name: Configure CMake (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-plugin-dev g++-13 gcc-13
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-13 -DCMAKE_C_COMPILER=gcc-13
+          sudo apt-get install -y gcc-13 gcc-13-plugin-dev g++-13 ninja-build
+          cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-13 -DCMAKE_C_COMPILER=gcc-13
+
+      - name: Build Project (Linux)
+        if: runner.os == 'Linux'
+        run: cmake --build build --config Release
+
+      - name: Run Test Suite (Linux)
+        if: runner.os == 'Linux'
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Set up MinGW (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
 
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        run: |
-          cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build Project
+      - name: Build Project (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
         run: cmake --build build --config Release
 
-      - name: Run Test Suite
+      - name: Run Test Suite (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
         run: ctest --test-dir build --output-on-failure
