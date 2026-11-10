@@ -1,10 +1,31 @@
 #include "safe_c_plugin.h"
 #include "gimple_pass.h"
+#include "analyzer.h"
 #include <cstring>
 #include <iostream>
 
 // Mandatory GPL compatibility symbol required by GCC plugin loader
 int plugin_is_GPL_compatible = 1;
+
+#ifdef HAVE_GCC_PLUGIN_HEADERS
+extern "C" const char *main_input_filename;
+
+static void on_plugin_all_passes_start(void* gcc_data, void* user_data) {
+    (void)gcc_data;
+    (void)user_data;
+    if (!safe_c::plugin::g_config.enabled) return;
+
+    if (main_input_filename && *main_input_filename) {
+        safe_c::core::Analyzer analyzer(safe_c::plugin::g_config.mode);
+        if (!analyzer.analyze_file(main_input_filename) || analyzer.has_errors()) {
+            analyzer.print_diagnostics(std::cerr);
+            if (safe_c::plugin::g_config.mode == safe_c::Mode::FatalError) {
+                exit(1);
+            }
+        }
+    }
+}
+#endif
 
 namespace safe_c::plugin {
 
@@ -61,6 +82,10 @@ SAFE_C_API int plugin_init(struct plugin_name_args *plugin_info,
 
     // Register our GIMPLE pass with GCC
     safe_c::plugin::register_safe_c_pass(plugin_info->base_name);
+
+#ifdef HAVE_GCC_PLUGIN_HEADERS
+    register_callback(plugin_info->base_name, PLUGIN_ALL_PASSES_START, on_plugin_all_passes_start, NULL);
+#endif
 
     return 0;
 }

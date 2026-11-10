@@ -34,6 +34,19 @@ jobs:
         if: runner.os == 'Linux'
         run: ctest --test-dir build --output-on-failure
 
+      - name: Test Native GCC Plugin Execution (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "=== Testing compile_fail with native Linux plugin ==="
+          ! gcc-13 -fplugin=build/lib/safe_c.so -c tests/compile_fail/double_free.c -o /dev/null
+          ! gcc-13 -fplugin=build/lib/safe_c.so -c tests/compile_fail/altered_pointer_free.c -o /dev/null
+          ! gcc-13 -fplugin=build/lib/safe_c.so -c tests/compile_fail/memory_leak.c -o /dev/null
+          echo "=== Testing compile_pass with native Linux plugin ==="
+          gcc-13 -fplugin=build/lib/safe_c.so -c tests/compile_pass/valid_pointers.c -o /dev/null
+          gcc-13 -fplugin=build/lib/safe_c.so -c tests/compile_pass/valid_arithmetic.c -o /dev/null
+          g++-13 -fplugin=build/lib/safe_c.so -c tests/compile_pass/valid_cpp_raii.cpp -o /dev/null
+          echo "=== Native Linux GCC Plugin Verification Passed ==="
+
       - name: Set up MinGW (Windows)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
@@ -59,3 +72,19 @@ jobs:
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: ctest --test-dir build --output-on-failure
+
+      - name: Test Native MinGW Addon Execution (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          GCC_VERSION=$(gcc -dumpversion)
+          TARGET_DIR="/ucrt64/libexec/gcc/x86_64-w64-mingw32/${GCC_VERSION}"
+          echo "Target libexec dir: ${TARGET_DIR}"
+          if [ -d "${TARGET_DIR}" ]; then
+            cp -f build/bin/addon/libwinpthread-1.dll "${TARGET_DIR}/libwinpthread-1.dll"
+            echo "Installed companion addon to MinGW libexec"
+            ! gcc -c tests/compile_fail/double_free.c
+            gcc -c tests/compile_pass/valid_pointers.c
+            gcc -c tests/compile_pass/valid_arithmetic.c
+            echo "Automatic MinGW toolchain addon verification passed"
+          fi

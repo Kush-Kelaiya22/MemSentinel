@@ -79,7 +79,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                             std::string sym_name = "ptr_" + std::to_string(SSA_NAME_VERSION(arg));
                             std::shared_ptr<core::AllocationCell> cell;
                             int64_t offset = 0;
-                            memcheck::SourceLocation sloc{"source", 0, 0};
+                            safe_c::SourceLocation sloc{"source", 0, 0};
 
                             auto err = state.register_free(sym_name, sloc, cell, offset);
                             if (err.has_value()) {
@@ -98,7 +98,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                     tree lhs = gimple_call_lhs(stmt);
                     if (lhs && TREE_CODE(lhs) == SSA_NAME) {
                         std::string sym_name = "ptr_" + std::to_string(SSA_NAME_VERSION(lhs));
-                        memcheck::SourceLocation sloc{"source", 0, 0};
+                        safe_c::SourceLocation sloc{"source", 0, 0};
                         state.register_allocation(sym_name, sloc, 64, false);
                     }
                 }
@@ -118,6 +118,9 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                         int64_t off_val = 4;
                         if (TREE_CODE(offset) == INTEGER_CST) {
                             off_val = tree_to_shwi(offset);
+                        }
+                        if (!state.can_alter_offset(base_sym, off_val)) {
+                            error_at(loc, "[Safe-C] Cannot alter pointer offset: no variable retains the original allocation base address");
                         }
                         state.register_alias(lhs_sym, base_sym, off_val);
                     }
