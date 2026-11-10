@@ -1,54 +1,91 @@
-# MemSentinel Manual Steps & Deployment Procedures
+# MemSentinel Manual Steps, Diagnostics & Deployment Guide
 
-This guide provides an explicit checklist of manual operations required when deploying **MemSentinel** into custom MinGW or Linux environments.
+This guide explains how GCC resolves plugins and specs, why some MinGW builds reject plugins, and how to configure your system properly.
 
 ---
 
-## 1. MinGW-w64 Plugin Headers Configuration (Windows Only)
+## 1. Why Did Default Setup Fail On Some MinGW Distributions?
 
-Standard pre-compiled distributions of MinGW-w64 often omit plugin headers to save disk space.
+There are two distinct technical reasons why standard plugin setup can fail on certain MinGW installations:
 
-### Check if Plugin Headers are Present:
-Run in PowerShell:
-```powershell
-gcc -print-file-name=plugin
+### Reason A: Standalone MinGW-Builds Was Built with `--disable-plugin`
+If you downloaded a standalone ZIP release of MinGW-Builds (e.g. from GitHub or SourceForge), check its configure line:
+```bash
+gcc -v
 ```
-* If a directory path containing `include/gcc-plugin.h` is returned, your MinGW installation is **ready** for native plugin building.
-* If it returns `plugin` or the directory lacks `include/gcc-plugin.h`, install the development package via MSYS2:
+Look for `Configured with:`:
+* If it contains `--enable-plugin`: Your GCC **fully supports native plugins**.
+* If it lacks `--enable-plugin` (or contains `--disable-plugin`): GCC's internal compiler (`cc1.exe` / `cc1plus.exe`) was compiled without plugin hooks. Loading any plugin throws:
+  ```text
+  cc1plus.exe: error: plugin support is disabled; configure with '--enable-plugin'
+  ```
+  **Solution:** Use a MinGW distribution built with plugin support, such as:
+  - **MSYS2 MinGW-w64 (Recommended):** `pacman -S mingw-w64-ucrt-x86_64-gcc`
+  - **Brecht Sanders MinGW-w64 builds** (with plugin dev enabled).
+
+### Reason B: Resolving the GCC Specs Directory
+Running `gcc -print-file-name=specs` on a fresh system will literally output the word `"specs"` if no specs file currently exists.
+* **The correct, universal GCC command** to find the compiler's private directory is:
+  ```powershell
+  # PowerShell:
+  $gccLibDir = Split-Path (gcc -print-libgcc-file-name)
+  ```
   ```bash
-  pacman -S mingw-w64-x86_64-gcc-plugin-devel
+  # Linux / macOS Bash:
+  dirname $(gcc -print-libgcc-file-name)
   ```
 
 ---
 
-## 2. Deploying MemSentinel as Default in GCC / MinGW (Zero Wrappers)
+## 2. Automated Diagnostic & Setup Script
 
-To make `gcc` and `g++` automatically invoke MemSentinel without typing `-fplugin=...` manually:
+MemSentinel includes automated diagnostic and installation tools that detect your GCC build flags, verify compatibility, install the files, and run a self-test:
 
-### Step 2.1: Copy the Built Plugin
+### On Windows (PowerShell):
+```powershell
+.\tools\memsentinel-setup.ps1
+```
+* Checks if `gcc.exe` has `--enable-plugin`.
+* Finds the exact `libgcc` directory and copies `memsentinel.specs`.
+* Compiles an inline verification snippet to confirm double-free detection is working.
+* To uninstall: `.\tools\memsentinel-setup.ps1 -Uninstall`
+
+### On Linux / macOS (Bash):
+```bash
+chmod +x ./tools/memsentinel-setup.sh
+./tools/memsentinel-setup.sh
+```
+
+---
+
+## 3. Manual Step-by-Step Installation (If Not Using Setup Script)
+
+If you prefer to perform manual steps without the setup script:
+
+### Step 3.1: Locate the GCC Specs Directory
+```powershell
+# PowerShell
+$destDir = Split-Path -Parent (& gcc -print-libgcc-file-name).Trim()
+Copy-Item "src/specs/memsentinel.specs" "$destDir\specs"
+```
+```bash
+# Linux
+sudo cp src/specs/memsentinel.specs $(dirname $(gcc -print-libgcc-file-name))/specs
+```
+
+### Step 3.2: Copy Plugin Binary
 - **Windows (MinGW):**
   ```powershell
-  Copy-Item "build/bin/memsentinel.dll" "$((gcc -print-file-name=plugin).Trim())\"
+  Copy-Item "build/bin/memsentinel.dll" "$((& gcc -print-file-name=plugin).Trim())\"
   ```
 - **Linux:**
   ```bash
   sudo cp build/lib/memsentinel.so $(gcc -print-file-name=plugin)/
   ```
 
-### Step 2.2: Register via Specs File
-Copy `src/specs/memsentinel.specs` into your GCC installation directory as `specs`:
-- **Windows (MinGW):**
-  ```powershell
-  Copy-Item "src/specs/memsentinel.specs" "$((gcc -print-file-name=specs).Trim())\specs"
-  ```
-- **Linux:**
-  ```bash
-  sudo cp src/specs/memsentinel.specs $(dirname $(gcc -print-libgcc-file-name))/specs
-  ```
-
 ---
 
-## 3. Disabling MemSentinel on Demand
+## 4. Disabling MemSentinel on Demand
 
 To bypass checking for third-party libraries:
 ```bash
@@ -59,15 +96,4 @@ Or set an environment variable:
 export MEMSENTINEL_DISABLE=1
 # Windows PowerShell:
 $env:MEMSENTINEL_DISABLE="1"
-```
-
----
-
-## 4. Customizing Runtime Diagnostic Log Destination
-
-By default, runtime guardrails write failure reports to `./memcheck_runtime.log`. To specify a central log path:
-```bash
-export MEMCHECK_LOG_PATH="/var/log/memsentinel.log"
-# Windows PowerShell:
-$env:MEMCHECK_LOG_PATH = "C:\logs\memsentinel.log"
 ```
