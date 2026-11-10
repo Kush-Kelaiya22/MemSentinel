@@ -1,11 +1,13 @@
 # MemCheck: Compile-Time Memory Safety Checker for GCC / G++
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
 [![GCC Compatibility](https://img.shields.io/badge/GCC-%3E%3D%204.5.0-success.svg)](https://gcc.gnu.org/)
 [![C++ Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20MinGW%20%7C%20Linux-brightgreen.svg)]()
 
-> **MemCheck** is a high-precision compile-time memory safety checker and GCC/G++ plugin equipped with runtime guardrails. It prevents memory unsafety bugs in standard C and C++ by **halting compilation directly at compile time** before vulnerable binaries can ever be produced.
+> **MemCheck** is a pure compile-time memory safety checker and native GCC/G++ plugin equipped with runtime guardrails. It prevents memory unsafety bugs in standard C and C++ by **halting compilation directly at compile time** before vulnerable binaries can ever be produced.
+>
+> **Pure Native Plugin:** Zero wrapper scripts or environment hacks. Works automatically with existing GCC toolchains as soon as it is added to their path or specs.
 
 ---
 
@@ -185,4 +187,4 @@ For manual integration steps, MinGW headers installation, and specs setup, see:
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0 (GPLv3)**. See [LICENSE](LICENSE) for details.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**. See [LICENSE](LICENSE) for details. GCC plugin interfaces comply with GCC runtime licensing requirements (`plugin_is_GPL_compatible`).
