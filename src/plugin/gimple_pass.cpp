@@ -84,9 +84,9 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                             auto err = state.register_free(sym_name, sloc, cell, offset);
                             if (err.has_value()) {
                                 if (*err == ViolationType::DoubleFree) {
-                                    error_at(loc, "[MEMSENTINEL] Fatal error: Double free detected on pointer.");
+                                    error_at(loc, "[MEMSENTINEL] Fatal error: Double free detected on pointer");
                                 } else if (*err == ViolationType::ModifiedBaseFree) {
-                                    error_at(loc, "[MEMSENTINEL] Fatal error: Attempt to free interior/altered pointer (offset: %ld bytes).", (long)offset);
+                                    error_at(loc, "[MEMSENTINEL] Fatal error: Attempt to free interior/altered pointer (offset: %ld bytes)", (long)offset);
                                 }
                             }
                         }
@@ -132,7 +132,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                     std::shared_ptr<core::AllocationCell> cell;
                     auto err = state.validate_access(sym_name, cell);
                     if (err.has_value() && *err == ViolationType::UseAfterFree) {
-                        error_at(loc, "[MEMSENTINEL] Fatal error: Use-After-Free detected: dereferencing freed pointer.");
+                        error_at(loc, "[MEMSENTINEL] Fatal error: Use-After-Free detected: dereferencing freed pointer");
                     }
                 }
             }
@@ -142,7 +142,9 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
     // Check for memory leaks before function exit
     auto leaks = state.find_leaks();
     for (const auto& [symbol, cell] : leaks) {
-        warning_at(DECL_SOURCE_LOCATION(fun->decl),
+        (void)symbol;
+        (void)cell;
+        warning_at(DECL_SOURCE_LOCATION(fun->decl), 0,
                    "[MEMSENTINEL] Memory leak detected: dynamically allocated pointer was not freed before exiting '%s'.",
                    IDENTIFIER_POINTER(DECL_NAME(fun->decl)));
     }
