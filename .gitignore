@@ -1,0 +1,39 @@
+# Build directories
+build/
+bin/
+lib/
+out/
+dist/
+*.obj
+*.o
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.ninja
+.ninja_*
+compile_commands.json
+
+# IDE / Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+memcheck_runtime.log
+
+# Temporary test outputs
+test_out/
+*.tmp
