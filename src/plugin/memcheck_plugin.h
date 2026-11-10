@@ -1,8 +1,16 @@
 #ifndef MEMCHECK_PLUGIN_H
 #define MEMCHECK_PLUGIN_H
 
-#include "memcheck/common.h"
+// C++ standard library headers MUST precede GCC system.h / gcc-plugin.h
 #include <string>
+#include <vector>
+#include <memory>
+#include <iostream>
+#include <unordered_map>
+#include <cstdint>
+#include <cstring>
+
+#include "memcheck/common.h"
 
 #ifdef HAVE_GCC_PLUGIN_HEADERS
   #include <gcc-plugin.h>
