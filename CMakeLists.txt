@@ -56,3 +56,39 @@ add_subdirectory(src/core)
 add_subdirectory(src/plugin)
 add_subdirectory(src/runtime)
 add_subdirectory(tests)
+
+# Packaging and Installation
+install(TARGETS safe_c_core safe_c_rt safe_c_rt_static
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+install(TARGETS safe_c_plugin
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+if(WIN32)
+    install(TARGETS safe_c_addon
+        LIBRARY DESTINATION bin/addon
+        RUNTIME DESTINATION bin/addon
+    )
+endif()
+
+install(DIRECTORY include/safe_c DESTINATION include)
+install(FILES src/specs/safe_c.specs DESTINATION specs)
+install(FILES README.md LICENSE DESTINATION .)
+
+set(CPACK_PACKAGE_NAME "Safe-C")
+set(CPACK_PACKAGE_VENDOR "Safe-C Contributors")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Safe-C: Native Compile-Time Memory Safety Extension for GCC and G++")
+set(CPACK_PACKAGE_VERSION "1.0.0")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+if(WIN32)
+    set(CPACK_GENERATOR "ZIP")
+else()
+    set(CPACK_GENERATOR "TGZ")
+endif()
+include(CPack)
