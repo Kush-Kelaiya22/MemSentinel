@@ -38,20 +38,37 @@ Safe-C verifies typestates and allocation bounds during compilation:
 
 Safe-C provides native integration for both Windows (MinGW-w64) and Linux/macOS (GCC):
 
+### Safe-C Compiler Invocations
+Safe-C provides native compiler drivers named `safe-c`, `safe_c`, `safe-gcc`, and `safe-g++` that can be used directly in place of `gcc` or `g++`:
+
+```cmd
+# Compile C with compile-time memory safety enforcement:
+safe-c main.c -o main.exe
+# Or interchangeably:
+safe_c main.c -o main.exe
+safe-gcc main.c -o main.exe
+
+# Compile C++ with compile-time memory safety enforcement:
+safe-g++ app.cpp -o app.exe
+
+# Static analysis only (without producing a binary):
+safe-c --check-only main.c
+```
+
 ### Enable by Default (Zero-Flag Enforcement)
 Safe-C can be enabled by default across your entire toolchain, so that all standard `gcc` and `g++` invocations enforce memory safety without passing any extra flags:
 ```cmd
 # Enable Safe-C by default for all host GCC/G++ compilers:
-safe_c --enable-default
+safe-c --enable-default
 
 # Or enable via CMake:
 cmake --build build --target enable-default
 
 # Check current activation status:
-safe_c --status
+safe-c --status
 
 # Disable default auto-loading:
-safe_c --disable-default
+safe-c --disable-default
 ```
 
 Once enabled, simply running standard commands like:

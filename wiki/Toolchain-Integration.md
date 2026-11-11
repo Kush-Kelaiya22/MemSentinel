@@ -2,22 +2,39 @@
 
 Safe-C provides native integration for both Windows (MinGW-w64) and POSIX/Linux (GCC).
 
+## Safe-C Native Compiler Drivers
+
+Safe-C provides direct compiler driver executables that can be used directly in place of standard `gcc` or `g++`:
+
+```cmd
+# Compile C with compile-time memory safety enforcement:
+safe-c main.c -o main.exe
+safe_c main.c -o main.exe
+safe-gcc main.c -o main.exe
+
+# Compile C++ with compile-time memory safety enforcement:
+safe-g++ app.cpp -o app.exe
+
+# Perform memory safety static analysis only (without compiling binary):
+safe-c --check-only main.c
+```
+
 ## Enable by Default (Zero-Flag Toolchain Activation)
 
 Safe-C can be enabled by default across your entire toolchain so that plain `gcc` and `g++` invocations automatically enforce memory safety:
 
 ```cmd
 # Enable Safe-C by default for host GCC/G++:
-safe_c --enable-default
+safe-c --enable-default
 
 # Or via CMake build target:
 cmake --build build --target enable-default
 
 # Check current activation status:
-safe_c --status
+safe-c --status
 
 # Disable default auto-loading:
-safe_c --disable-default
+safe-c --disable-default
 ```
 
 Once enabled, plain commands like `gcc -c main.c` and `g++ -c app.cpp` automatically enforce memory safety and halt compilation on violations.

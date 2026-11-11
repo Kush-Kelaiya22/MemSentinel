@@ -379,21 +379,36 @@ void invalid_buffer(void) {
 
     <section id="toolchain">
       <h2>5. Toolchain Setup &amp; Invocations</h2>
+      <h3>Safe-C Compiler Drivers (safe-c &amp; safe-g++)</h3>
+      <p>
+        Safe-C provides direct compiler drivers named <code>safe-c</code>, <code>safe_c</code>, <code>safe-gcc</code>, and <code>safe-g++</code> that function as drop-in compilers:
+      </p>
+      <pre><code># Compile C with compile-time memory safety enforcement
+safe-c main.c -o main.exe
+safe_c main.c -o main.exe
+safe-gcc main.c -o main.exe
+
+# Compile C++ with compile-time memory safety enforcement
+safe-g++ app.cpp -o app.exe
+
+# Static analysis only (without compiling binary)
+safe-c --check-only main.c</code></pre>
+
       <h3>Zero-Flag Default Activation</h3>
       <p>
         Safe-C can be activated by default across your compiler toolchain so that plain <code>gcc</code> and <code>g++</code> invocations automatically halt on memory hazards without any extra flags:
       </p>
       <pre><code># Enable Safe-C by default for all host GCC/G++ compilers
-safe_c --enable-default
+safe-c --enable-default
 
 # Or enable via CMake build target
 cmake --build build --target enable-default
 
 # Check default activation status
-safe_c --status
+safe-c --status
 
 # Disable default auto-loading
-safe_c --disable-default</code></pre>
+safe-c --disable-default</code></pre>
 
       <h3>Per-Invocation Options</h3>
       <pre><code># 1. Universal specs integration (works across ALL MinGW-w64 toolchains)
@@ -403,11 +418,9 @@ g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
 # 2. Direct compiler plugin invocation (for plugin-enabled toolchains)
 gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
 
-# 3. Direct front-end analysis
-safe_c main.c
-
-# 4. Bypassing Safe-C when compiling third-party code
+# 3. Bypassing Safe-C when compiling third-party code
 gcc -DSAFE_C_DISABLE -c legacy.c -o legacy.o
+set SAFE_C_DISABLE=1</code></pre>
 set SAFE_C_DISABLE=1</code></pre>
 
       <h3>Linux / macOS (GCC Plugin)</h3>

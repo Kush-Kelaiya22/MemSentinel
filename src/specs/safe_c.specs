@@ -3,9 +3,9 @@
 # To disable Safe-C: pass -DSAFE_C_DISABLE, -fno-safe-c, or set SAFE_C_DISABLE=1.
 
 @c:
-safe_c %{D*&U*&A*} %{fdiagnostics-*} %i
+safe_c --check-only %{D*&U*&A*} %{fdiagnostics-*} %i
 cc1 %(cpp_unique_options) %(cc1_options) %(invoke_as)
 
 @c++:
-safe_c %{D*&U*&A*} %{fdiagnostics-*} %i
+safe_c --check-only %{D*&U*&A*} %{fdiagnostics-*} %i
 cc1plus %(cpp_unique_options) %(cc1_options) %(invoke_as)
