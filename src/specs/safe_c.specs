@@ -2,11 +2,5 @@
 # This file instructs GCC/G++ to load the Safe-C plugin by default for all compilations.
 # To disable Safe-C, pass -DSAFE_C_DISABLE, -fplugin-arg-safe_c-disable, or set SAFE_C_DISABLE=1.
 
-*cc1_options:
-+ %{!DSAFE_C_DISABLE:%{!DSAFE_CPP_DISABLE:%{!fplugin-arg-safe_c-disable:%{!fplugin-arg-safe_cpp-disable:-fplugin=safe_c}}}}
-
-*cc1plus_options:
-+ %{!DSAFE_C_DISABLE:%{!DSAFE_CPP_DISABLE:%{!fplugin-arg-safe_c-disable:%{!fplugin-arg-safe_cpp-disable:-fplugin=safe_c}}}}
-
-*link:
-+ %{!DSAFE_C_DISABLE:%{!DSAFE_CPP_DISABLE:%{!fplugin-arg-safe_c-disable:%{!nodefaultlibs:%{!nostdlib:-lsafe_c_rt}}}}}
+*self_spec:
++ %{!DSAFE_C_DISABLE:%{!DSAFE_CPP_DISABLE:%{!fplugin-arg-safe_c-disable:%{!fplugin-arg-safe_cpp-disable:%{!fplugin*:-fplugin=safe_c}}}}}
