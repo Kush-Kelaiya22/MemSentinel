@@ -1,4 +1,4 @@
-# GNU/GCC Diagnostic Highlighting
+# GNU/GCC Diagnostic Highlighting & Syntax Highlighting
 
 ## Overview
 
@@ -14,18 +14,42 @@ tests/compile_fail/double_free.c:5:5: note: Previous deallocation occurred here:
 compilation terminated due to memory safety violations.
 ```
 
-## Elements
+---
 
-1. **Location Header:** `filename:line:col:` rendered in bold (`\033[01m`).
-2. **Diagnostic Severity:**
-   - `error:` rendered in bold red (`\033[01;31m`).
-   - `note:` rendered in bold cyan (`\033[01;36m`).
-   - `warning:` rendered in bold magenta (`\033[01;35m`).
-3. **Quoted Identifiers:** Symbols enclosed in single quotes like `'ptr'` are highlighted in bold white.
-4. **Source Gutter:** Line numbers and vertical separator (`   6 | `) rendered in bold blue (`\033[01;34m`).
-5. **Token Caret & Underline:** Caret `^` aligned with the token's column and underlined with tildes `~` matching the token length.
-6. **Color Autodetection:**
-   - Automatically enabled for TTY terminals.
-   - Respects `NO_COLOR` and empty `GCC_COLORS`.
-   - On Windows consoles, enables `ENABLE_VIRTUAL_TERMINAL_PROCESSING`.
-   - Can be overridden using `SAFE_C_COLOR=always|never|auto`.
+## Compiler Flags Supported
+
+Safe-C natively parses and honors standard GCC diagnostic formatting flags:
+
+| Flag | Purpose | Default |
+| :--- | :--- | :--- |
+| `-fdiagnostics-color=always` / `-fdiagnostics-color` | Force ANSI color escape sequences on diagnostics | Active for TTY |
+| `-fdiagnostics-color=never` / `-fno-diagnostics-color` | Disable ANSI color escape sequences (plain text output) | - |
+| `-fdiagnostics-color=auto` | Automatically detect terminal and virtual terminal capability | Yes |
+| `-fdiagnostics-show-highlight-colors` | Enable lexical C/C++ syntax highlighting on source code lines | Enabled |
+| `-fno-diagnostics-show-highlight-colors` | Disable lexical syntax highlighting on source lines | - |
+
+---
+
+## Syntax Highlighting Elements
+
+When color is active, Safe-C applies lexical syntax highlighting to source lines:
+
+1. **Preprocessor Directives:** `#include`, `#define`, `#ifdef`, etc. highlighted in bold yellow (`\033[01;33m`).
+2. **C/C++ Types:** `void`, `int`, `char`, `size_t`, `int64_t`, `auto`, etc. in bold green/cyan (`\033[01;32m`).
+3. **C/C++ Keywords & Memory Primitives:** `free`, `malloc`, `new`, `delete`, `return`, `if`, `struct`, etc. in bold cyan (`\033[01;36m`).
+4. **Target Violation Token:** The token causing the violation (`col` to `col + len`) is highlighted in bold red (`\033[01;31m`) for errors or bold cyan (`\033[01;36m`) for notes.
+5. **String and Character Literals:** `"..."` and `'...'` in green (`\033[32m`).
+6. **Numeric Literals:** Hex (`0x...`), decimal, floating-point in magenta (`\033[35m`).
+7. **Comments:** Single-line (`// ...`) and block (`/* ... */`) in muted grey (`\033[90m`).
+
+---
+
+## Palette Customization via `GCC_COLORS`
+
+Safe-C parses the standard `GCC_COLORS` environment variable to allow custom palette configurations:
+
+```bash
+export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
+```
+
+If `GCC_COLORS=""` is defined empty, colored output is suppressed. Safe-C also honors the `NO_COLOR` standard.

@@ -197,7 +197,54 @@ bool should_use_color(ColorChoice choice, std::ostream& os) {
 #endif
 }
 
-std::string colorize_message(const std::string& msg, bool use_color) {
+struct GccColors {
+    std::string error = "\033[01;31m";
+    std::string warning = "\033[01;35m";
+    std::string note = "\033[01;36m";
+    std::string locus = "\033[01m";
+    std::string quote = "\033[01m";
+    std::string caret = "\033[01;32m";
+    std::string gutter = "\033[01;34m";
+    std::string keyword = "\033[01;36m";
+    std::string type = "\033[01;32m";
+    std::string preproc = "\033[01;33m";
+    std::string string_lit = "\033[32m";
+    std::string number_lit = "\033[35m";
+    std::string comment = "\033[90m";
+    std::string reset = "\033[0m";
+
+    static GccColors from_env() {
+        GccColors colors;
+        const char* env = std::getenv("GCC_COLORS");
+        if (!env || env[0] == '\0') {
+            return colors;
+        }
+        std::string_view s(env);
+        size_t start = 0;
+        while (start < s.size()) {
+            size_t end = s.find(':', start);
+            if (end == std::string_view::npos) end = s.size();
+            std::string_view part = s.substr(start, end - start);
+            size_t eq = part.find('=');
+            if (eq != std::string_view::npos) {
+                std::string_view key = part.substr(0, eq);
+                std::string_view val = part.substr(eq + 1);
+                std::string ansi = "\033[" + std::string(val) + "m";
+                if (key == "error") colors.error = ansi;
+                else if (key == "warning") colors.warning = ansi;
+                else if (key == "note") colors.note = ansi;
+                else if (key == "locus") colors.locus = ansi;
+                else if (key == "quote") colors.quote = ansi;
+                else if (key == "caret") colors.caret = ansi;
+                else if (key == "line-numbers" || key == "locus") colors.gutter = ansi;
+            }
+            start = end + 1;
+        }
+        return colors;
+    }
+};
+
+std::string colorize_message(const std::string& msg, bool use_color, const GccColors& colors) {
     if (!use_color) return msg;
     std::string result;
     bool in_quote = false;
@@ -205,10 +252,10 @@ std::string colorize_message(const std::string& msg, bool use_color) {
         char c = msg[i];
         if (c == '\'') {
             if (!in_quote) {
-                result += "\033[01m'";
+                result += colors.quote + "'";
                 in_quote = true;
             } else {
-                result += "'\033[0m";
+                result += "'" + colors.reset;
                 in_quote = false;
             }
         } else {
@@ -216,43 +263,119 @@ std::string colorize_message(const std::string& msg, bool use_color) {
         }
     }
     if (in_quote) {
-        result += "\033[0m";
+        result += colors.reset;
     }
     return result;
 }
 
-std::string highlight_source_line(std::string_view line, bool use_color) {
+std::string highlight_source_line(
+    std::string_view line,
+    bool use_color,
+    const GccColors& colors,
+    bool enable_highlight = true,
+    uint32_t target_col = 0,
+    uint32_t target_len = 0,
+    bool is_error = true
+) {
     if (!use_color) return std::string(line);
 
-    static const std::unordered_set<std::string_view> keywords = {
+    // If whole-line syntax highlighting is disabled, only highlight target token if requested
+    if (!enable_highlight) {
+        if (target_col == 0 || target_len == 0 || target_col > line.size()) {
+            return std::string(line);
+        }
+        size_t start = target_col - 1;
+        size_t len = std::min<size_t>(target_len, line.size() - start);
+        std::string res;
+        res += line.substr(0, start);
+        res += (is_error ? colors.error : colors.note);
+        res += line.substr(start, len);
+        res += colors.reset;
+        res += line.substr(start + len);
+        return res;
+    }
+
+    static const std::unordered_set<std::string_view> types = {
         "void", "char", "short", "int", "long", "float", "double", "signed",
-        "unsigned", "bool", "auto", "const", "static", "sizeof", "struct",
-        "union", "enum", "typedef", "return", "if", "else", "while", "for",
-        "do", "switch", "case", "break", "continue", "default", "goto",
-        "NULL", "nullptr", "malloc", "calloc", "realloc", "free", "new",
-        "delete", "class", "public", "private", "protected", "virtual",
-        "override", "template", "typename", "using", "namespace", "std"
+        "unsigned", "bool", "size_t", "ssize_t", "int8_t", "int16_t",
+        "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+        "intptr_t", "uintptr_t", "ptrdiff_t", "wchar_t", "char8_t", "char16_t",
+        "char32_t", "auto"
+    };
+
+    static const std::unordered_set<std::string_view> keywords = {
+        "const", "static", "volatile", "register", "restrict", "inline",
+        "extern", "sizeof", "struct", "union", "enum", "typedef", "return",
+        "if", "else", "while", "for", "do", "switch", "case", "break",
+        "continue", "default", "goto", "NULL", "nullptr", "malloc", "calloc",
+        "realloc", "free", "aligned_alloc", "new", "delete", "class",
+        "public", "private", "protected", "virtual", "override", "final",
+        "template", "typename", "using", "namespace", "std", "throw",
+        "try", "catch", "noexcept", "explicit", "friend", "operator",
+        "constexpr", "consteval", "constinit", "decltype", "static_assert"
     };
 
     std::string result;
     size_t i = 0;
     const size_t len = line.size();
 
+    // Check if line is preprocessor directive: starts with '#' (ignoring leading whitespace)
+    size_t non_ws = 0;
+    while (non_ws < len && std::isspace(static_cast<unsigned char>(line[non_ws]))) {
+        non_ws++;
+    }
+    if (non_ws < len && line[non_ws] == '#') {
+        result += line.substr(0, non_ws);
+        result += colors.preproc;
+        result += line.substr(non_ws);
+        result += colors.reset;
+        return result;
+    }
+
     while (i < len) {
+        // Target token highlighting (e.g. error site token in red)
+        uint32_t current_col = static_cast<uint32_t>(i + 1);
+        if (target_col > 0 && target_len > 0 && current_col == target_col) {
+            size_t tok_len = std::min<size_t>(target_len, len - i);
+            result += (is_error ? colors.error : colors.note);
+            result += line.substr(i, tok_len);
+            result += colors.reset;
+            i += tok_len;
+            continue;
+        }
+
         char c = line[i];
 
         // Single line comment
         if (c == '/' && i + 1 < len && line[i + 1] == '/') {
-            result += "\033[90m";
+            result += colors.comment;
             result += line.substr(i);
-            result += "\033[0m";
+            result += colors.reset;
             break;
+        }
+
+        // Multi-line comment
+        if (c == '/' && i + 1 < len && line[i + 1] == '*') {
+            result += colors.comment;
+            result += "/*";
+            i += 2;
+            while (i + 1 < len && !(line[i] == '*' && line[i + 1] == '/')) {
+                result += line[i++];
+            }
+            if (i + 1 < len) {
+                result += "*/";
+                i += 2;
+            } else if (i < len) {
+                result += line[i++];
+            }
+            result += colors.reset;
+            continue;
         }
 
         // String / char literals
         if (c == '"' || c == '\'') {
             char quote = c;
-            result += "\033[32m";
+            result += colors.string_lit;
             result += quote;
             i++;
             while (i < len && line[i] != quote) {
@@ -264,21 +387,25 @@ std::string highlight_source_line(std::string_view line, bool use_color) {
             if (i < len) {
                 result += line[i++];
             }
-            result += "\033[0m";
+            result += colors.reset;
             continue;
         }
 
-        // Identifiers and keywords
+        // Identifiers, types, and keywords
         if (std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
             size_t start = i;
             while (i < len && (std::isalnum(static_cast<unsigned char>(line[i])) || line[i] == '_')) {
                 i++;
             }
             std::string_view token = line.substr(start, i - start);
-            if (keywords.find(token) != keywords.end()) {
-                result += "\033[01;36m";
+            if (types.find(token) != types.end()) {
+                result += colors.type;
                 result += token;
-                result += "\033[0m";
+                result += colors.reset;
+            } else if (keywords.find(token) != keywords.end()) {
+                result += colors.keyword;
+                result += token;
+                result += colors.reset;
             } else {
                 result += token;
             }
@@ -287,11 +414,11 @@ std::string highlight_source_line(std::string_view line, bool use_color) {
 
         // Numbers
         if (std::isdigit(static_cast<unsigned char>(c))) {
-            result += "\033[35m";
-            while (i < len && (std::isalnum(static_cast<unsigned char>(line[i])) || line[i] == '.' || line[i] == 'x' || line[i] == 'X')) {
+            result += colors.number_lit;
+            while (i < len && (std::isalnum(static_cast<unsigned char>(line[i])) || line[i] == '.' || line[i] == 'x' || line[i] == 'X' || line[i] == '\'')) {
                 result += line[i++];
             }
-            result += "\033[0m";
+            result += colors.reset;
             continue;
         }
 
@@ -671,6 +798,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
 
 void Analyzer::print_diagnostics(std::ostream& os) const {
     const bool use_color = should_use_color(color_mode_, os);
+    const GccColors colors = use_color ? GccColors::from_env() : GccColors{};
 
     auto render_snippet = [&](const SourceLocation& loc, bool is_error) {
         if (loc.line == 0) return;
@@ -686,65 +814,66 @@ void Analyzer::print_diagnostics(std::ostream& os) const {
         int line_str_len = static_cast<int>(std::to_string(loc.line).length());
         int gutter_width = std::max(5, line_str_len + 1);
 
-        // Gutter line: "    6 | " in bold blue (\033[01;34m)
+        // Gutter line: "    6 | " in gutter color
         std::string line_num_str = std::to_string(loc.line);
         std::string pad(gutter_width - line_num_str.length(), ' ');
-        if (use_color) os << "\033[01;34m";
+        if (use_color) os << colors.gutter;
         os << pad << line_num_str << " | ";
-        if (use_color) os << "\033[0m";
+        if (use_color) os << colors.reset;
 
-        os << highlight_source_line(line_str, use_color) << "\n";
+        // Source line with GCC syntax and diagnostic token highlighting
+        os << highlight_source_line(line_str, use_color, colors, highlight_source_colors_, loc.column, loc.length, is_error) << "\n";
 
         // Caret line: "      |     ^~~~~~~~~"
         std::string caret_pad(gutter_width, ' ');
-        if (use_color) os << "\033[01;34m";
+        if (use_color) os << colors.gutter;
         os << caret_pad << " | ";
-        if (use_color) os << "\033[0m";
+        if (use_color) os << colors.reset;
 
         os << compute_indent(line_str, loc.column);
 
         uint32_t caret_len = (loc.length > 0) ? loc.length : 1;
         std::string caret_str = "^" + std::string(caret_len > 1 ? caret_len - 1 : 0, '~');
         if (use_color) {
-            os << (is_error ? "\033[01;31m" : "\033[01;36m");
+            os << (is_error ? colors.error : colors.note);
         }
         os << caret_str;
-        if (use_color) os << "\033[0m";
+        if (use_color) os << colors.reset;
         os << "\n";
     };
 
     for (const auto& diag : diagnostics_) {
         // Location header: filename:line:col:
-        if (use_color) os << "\033[01m";
+        if (use_color) os << colors.locus;
         os << diag.error_loc.filename << ":" << diag.error_loc.line << ":" << diag.error_loc.column << ": ";
-        if (use_color) os << "\033[0m";
+        if (use_color) os << colors.reset;
 
-        // Severity: error: in bold red
-        if (use_color) os << "\033[01;31m";
+        // Severity: error:
+        if (use_color) os << colors.error;
         os << "error: ";
-        if (use_color) os << "\033[0m";
+        if (use_color) os << colors.reset;
 
-        os << colorize_message(diag.primary_message, use_color) << "\n";
+        os << colorize_message(diag.primary_message, use_color, colors) << "\n";
         render_snippet(diag.error_loc, true);
 
         if (!diag.note_message.empty() && !diag.note_loc.filename.empty()) {
-            if (use_color) os << "\033[01m";
+            if (use_color) os << colors.locus;
             os << diag.note_loc.filename << ":" << diag.note_loc.line << ":" << diag.note_loc.column << ": ";
-            if (use_color) os << "\033[0m";
+            if (use_color) os << colors.reset;
 
-            if (use_color) os << "\033[01;36m";
+            if (use_color) os << colors.note;
             os << "note: ";
-            if (use_color) os << "\033[0m";
+            if (use_color) os << colors.reset;
 
-            os << colorize_message(diag.note_message, use_color) << "\n";
+            os << colorize_message(diag.note_message, use_color, colors) << "\n";
             render_snippet(diag.note_loc, false);
         }
     }
 
     if (!diagnostics_.empty()) {
-        if (use_color) os << "\033[01;31m";
+        if (use_color) os << colors.error;
         os << "compilation terminated due to memory safety violations.\n";
-        if (use_color) os << "\033[0m";
+        if (use_color) os << colors.reset;
     }
 }
 

@@ -280,6 +280,15 @@ void test_gnu_gcc_diagnostic_highlighting() {
     assert(colored.find("\033[01;36mnote:\033[0m") != std::string::npos && "Expected bold cyan note tag");
     assert(colored.find("\033[01m'ptr'\033[0m") != std::string::npos && "Expected bold quoted identifier");
     std::cout << "  ✓ ANSI colorization (bold red, cyan, gutter blue, quoted symbols) verified.\n";
+
+    // 3. Highlight toggle check (-fno-diagnostics-show-highlight-colors)
+    analyzer.set_highlight_colors(false);
+    std::ostringstream no_hl_oss;
+    analyzer.print_diagnostics(no_hl_oss);
+    std::string no_hl = no_hl_oss.str();
+    assert(no_hl.find("\033[01;31merror:\033[0m") != std::string::npos);
+    assert(no_hl.find("free(ptr);") != std::string::npos);
+    std::cout << "  ✓ Diagnostic highlight toggling verified.\n";
 }
 
 void test_runtime_guardrails() {

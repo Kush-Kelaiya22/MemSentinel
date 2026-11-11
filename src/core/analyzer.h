@@ -35,6 +35,9 @@ public:
     void set_color_mode(ColorChoice choice) noexcept { color_mode_ = choice; }
     [[nodiscard]] ColorChoice color_mode() const noexcept { return color_mode_; }
 
+    void set_highlight_colors(bool enable) noexcept { highlight_source_colors_ = enable; }
+    [[nodiscard]] bool highlight_colors() const noexcept { return highlight_source_colors_; }
+
     // Analyze C/C++ source code directly from string or file
     bool analyze_source(std::string_view source_code, std::string_view filename);
     bool analyze_file(const std::string& filepath);
@@ -71,6 +74,7 @@ private:
 
     Mode mode_{Mode::FatalError};
     ColorChoice color_mode_{ColorChoice::Auto};
+    bool highlight_source_colors_{true};
     StateTable state_;
     std::vector<Diagnostic> diagnostics_;
     std::unordered_map<std::string, std::vector<std::string>> source_line_cache_;

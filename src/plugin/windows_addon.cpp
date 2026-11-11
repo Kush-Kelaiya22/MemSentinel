@@ -219,6 +219,27 @@ static void check_compiler_invocations() {
 
     // Run Safe-C static memory safety analyzer
     safe_c::core::Analyzer analyzer(safe_c::Mode::FatalError);
+
+    // Support standard GCC diagnostic color flags (-fdiagnostics-color, -fno-diagnostics-color)
+    safe_c::core::ColorChoice color_choice = safe_c::core::ColorChoice::Auto;
+    bool show_highlights = true;
+    for (int i = 1; i < argc; ++i) {
+        std::wstring arg = argv[i];
+        if (arg == L"-fdiagnostics-color=always" || arg == L"-fdiagnostics-color") {
+            color_choice = safe_c::core::ColorChoice::Always;
+        } else if (arg == L"-fdiagnostics-color=never" || arg == L"-fno-diagnostics-color") {
+            color_choice = safe_c::core::ColorChoice::Never;
+        } else if (arg == L"-fdiagnostics-color=auto") {
+            color_choice = safe_c::core::ColorChoice::Auto;
+        } else if (arg == L"-fno-diagnostics-show-highlight-colors") {
+            show_highlights = false;
+        } else if (arg == L"-fdiagnostics-show-highlight-colors") {
+            show_highlights = true;
+        }
+    }
+    analyzer.set_color_mode(color_choice);
+    analyzer.set_highlight_colors(show_highlights);
+
     bool has_violation = false;
 
     for (const auto& file : files_to_check) {
