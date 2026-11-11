@@ -2,11 +2,29 @@
 
 Safe-C provides native integration for both Windows (MinGW-w64) and POSIX/Linux (GCC).
 
-## Windows MinGW-w64 Companion Addon & Plugin
+## Enable by Default (Zero-Flag Toolchain Activation)
 
-MinGW-w64 distributions vary in plugin support (official `mingw-builds` distributions are built without `--enable-plugin`, while WinLibs and MSYS2 support plugins). Safe-C supports all MinGW-w64 distributions out of the box.
+Safe-C can be enabled by default across your entire toolchain so that plain `gcc` and `g++` invocations automatically enforce memory safety:
 
-### Usage
+```cmd
+# Enable Safe-C by default for host GCC/G++:
+safe_c --enable-default
+
+# Or via CMake build target:
+cmake --build build --target enable-default
+
+# Check current activation status:
+safe_c --status
+
+# Disable default auto-loading:
+safe_c --disable-default
+```
+
+Once enabled, plain commands like `gcc -c main.c` and `g++ -c app.cpp` automatically enforce memory safety and halt compilation on violations.
+
+---
+
+## Per-Invocation Usage Options
 
 1. **Universal Specs File (Works across ALL MinGW-w64 toolchains):**
    ```cmd
@@ -23,9 +41,6 @@ MinGW-w64 distributions vary in plugin support (official `mingw-builds` distribu
    ```cmd
    safe_c main.c
    ```
-
-4. **Permanent Zero-Flag Auto-Loading:**
-   Copy `build/bin/safe_c.exe` into MinGW `bin/`, and copy `src/specs/safe_c.specs` as `specs` into your GCC install directory (`gcc -print-search-dirs` under `install:`). Now plain `gcc main.c` automatically runs Safe-C on every compilation.
 
 ---
 

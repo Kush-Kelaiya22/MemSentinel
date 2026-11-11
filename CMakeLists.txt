@@ -69,6 +69,19 @@ set_target_properties(safe_c_cli PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
+# Custom targets to manage default toolchain activation
+add_custom_target(enable-default
+    COMMAND ${CMAKE_BINARY_DIR}/bin/safe_c --enable-default
+    DEPENDS safe_c_cli
+    COMMENT "Enabling Safe-C by default for host GCC toolchain"
+)
+
+add_custom_target(disable-default
+    COMMAND ${CMAKE_BINARY_DIR}/bin/safe_c --disable-default
+    DEPENDS safe_c_cli
+    COMMENT "Disabling Safe-C default auto-loading for host GCC toolchain"
+)
+
 # Packaging and Installation
 install(TARGETS safe_c_core safe_c_rt safe_c_rt_static
     ARCHIVE DESTINATION lib

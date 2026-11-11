@@ -379,11 +379,24 @@ void invalid_buffer(void) {
 
     <section id="toolchain">
       <h2>5. Toolchain Setup &amp; Invocations</h2>
-      <h3>Windows (MinGW-w64) Toolchain Integration</h3>
+      <h3>Zero-Flag Default Activation</h3>
       <p>
-        MinGW-w64 toolchains vary in plugin support (standard <code>mingw-builds</code> is built without <code>--enable-plugin</code>, while WinLibs and MSYS2 support plugins). Safe-C supports all MinGW-w64 distributions out of the box:
+        Safe-C can be activated by default across your compiler toolchain so that plain <code>gcc</code> and <code>g++</code> invocations automatically halt on memory hazards without any extra flags:
       </p>
-      <pre><code># 1. Universal specs integration (works on ALL MinGW-w64 toolchains)
+      <pre><code># Enable Safe-C by default for all host GCC/G++ compilers
+safe_c --enable-default
+
+# Or enable via CMake build target
+cmake --build build --target enable-default
+
+# Check default activation status
+safe_c --status
+
+# Disable default auto-loading
+safe_c --disable-default</code></pre>
+
+      <h3>Per-Invocation Options</h3>
+      <pre><code># 1. Universal specs integration (works across ALL MinGW-w64 toolchains)
 gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
 g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
 

@@ -38,15 +38,38 @@ Safe-C verifies typestates and allocation bounds during compilation:
 
 Safe-C provides native integration for both Windows (MinGW-w64) and Linux/macOS (GCC):
 
-### Windows (MinGW-w64)
-MinGW-w64 distributions vary in plugin support (e.g., standard `mingw-builds` is built without `--enable-plugin`, while WinLibs and MSYS2 include plugin support). Safe-C supports all of them seamlessly:
+### Enable by Default (Zero-Flag Enforcement)
+Safe-C can be enabled by default across your entire toolchain, so that all standard `gcc` and `g++` invocations enforce memory safety without passing any extra flags:
+```cmd
+# Enable Safe-C by default for all host GCC/G++ compilers:
+safe_c --enable-default
 
-1. **Universal Specs Integration (Works across ALL MinGW-w64 toolchains):**
+# Or enable via CMake:
+cmake --build build --target enable-default
+
+# Check current activation status:
+safe_c --status
+
+# Disable default auto-loading:
+safe_c --disable-default
+```
+
+Once enabled, simply running standard commands like:
+```cmd
+gcc -c main.c -o main.o
+g++ -c app.cpp -o app.o
+```
+will automatically inspect memory safety and halt on violations.
+
+### Manual Toolchain Setup
+If you prefer not to enable Safe-C globally, you can invoke it per build:
+
+1. **Universal Specs Flag (Works across ALL MinGW-w64 toolchains):**
    ```cmd
    gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
    g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
    ```
-2. **Direct Compiler Plugin Invocation (for plugin-enabled MinGW builds):**
+2. **Direct Compiler Plugin Invocation (for plugin-enabled toolchains):**
    ```cmd
    gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
    ```
@@ -54,12 +77,13 @@ MinGW-w64 distributions vary in plugin support (e.g., standard `mingw-builds` is
    ```cmd
    safe_c main.c
    ```
-4. **Permanent Zero-Flag Auto-Loading:**
-   Copy `build/bin/safe_c.exe` into your MinGW `bin/` folder, and copy `src/specs/safe_c.specs` as `specs` into your GCC installation directory (`gcc -print-search-dirs` under `install:`). Now plain `gcc main.c` automatically halts on memory hazards without any extra flags!
 
 ### Linux & macOS
-Load the native GCC shared plugin `safe_c.so`:
 ```bash
+# Enable by default for host GCC:
+./build/bin/safe_c --enable-default
+
+# Or load directly per compilation:
 gcc -fplugin=build/lib/safe_c.so -c main.c -o main.o
 ```
 
