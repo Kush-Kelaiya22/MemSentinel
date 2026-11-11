@@ -64,17 +64,10 @@ install(TARGETS safe_c_core safe_c_rt safe_c_rt_static
     RUNTIME DESTINATION bin
 )
 
-install(TARGETS safe_c_plugin
+install(TARGETS safe_c
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
-
-if(WIN32)
-    install(TARGETS safe_c_addon
-        LIBRARY DESTINATION lib
-        RUNTIME DESTINATION bin
-    )
-endif()
 
 install(DIRECTORY include/safe_c DESTINATION include)
 install(FILES src/specs/safe_c.specs DESTINATION specs)

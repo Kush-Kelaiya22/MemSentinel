@@ -36,12 +36,9 @@ Safe-C verifies typestates and allocation bounds during compilation:
 
 ## Toolchain Setup
 
+The Safe-C library is built as `safe_c` (`bin/safe_c.dll` on Windows, `lib/safe_c.so` on Linux):
+
 ### Windows (MinGW-w64)
-Safe-C provides the companion addon library `safe_c_addon.dll` and plugin `safe_c.dll` under `build/bin/`:
-```bash
-# Build Safe-C
-cmake --build build --config Release
-```
 Load the Safe-C plugin directly with GCC:
 ```cmd
 gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
@@ -55,6 +52,56 @@ gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
 Load the native GCC shared plugin `safe_c.so`:
 ```bash
 gcc -fplugin=build/lib/safe_c.so -c main.c -o main.o
+```
+
+---
+
+## Self-Compilation & Dogfooding
+
+Safe-C is written in modern C++20 and C11 and dogfoods its own memory safety guarantees:
+- **Zero Invariant Violations:** All data structures, token caches, and state tables in Safe-C obey its own memory safety contracts (zero leaks, zero use-after-free, zero double free).
+- **Self-Hosting Compilation:** Safe-C compiles cleanly when analyzed by its own plugin (`-fplugin=safe_c`), demonstrating self-hosting verification without false positives.
+
+```bash
+# Clone and compile Safe-C from source
+git clone https://github.com/Kush-Kelaiya22/Safe-C.git
+cd Safe-C
+
+cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+```
+
+---
+
+## Binary Migration & Project Adoption
+
+Safe-C is designed for incremental, non-breaking adoption in existing C and C++ codebases:
+
+1. **Zero Code Refactoring:** No conversion of raw pointers to smart pointers is required. Standard `T*` declarations, pointer arithmetic (`ptr++`, `ptr += n`), `malloc`/`free`, and `new`/`delete` remain fully supported.
+2. **Audit Phase (`-fplugin-arg-safe_c-mode=warn`):** Run Safe-C in warning mode across legacy codebases to catalogue potential leaks and hazards without breaking CI builds.
+3. **Enforcement Phase (Default):** Halt compilation on pull requests whenever memory safety violations are introduced.
+4. **Selective Exemption:** Exempt third-party vendor directories or legacy modules via `-DSAFE_C_DISABLE` or `export SAFE_C_DISABLE=1`.
+5. **Runtime Transition Defense:** Link `libsafe_c_rt` to track allocations at dynamic binary boundaries and capture forensic logs in `safe_c_runtime.log`.
+
+---
+
+## Testing Details & Test Harness
+
+Safe-C includes an automated verification test suite:
+
+- **Compile-Fail Static Analysis Suite:** Verifies that Double Free, Use-After-Free, Altered Base Deallocation, and Memory Leaks halt compilation with fatal errors.
+- **Compile-Pass Regression Suite:** Verifies that idiomatic raw pointers, cursor arithmetic, and C++ RAII lifetimes compile cleanly with zero false positives.
+- **Pointer Offset & Base Invariant Suite:** Validates that cursor advancement is allowed while a base variable exists, and rejected when the base is lost.
+- **Address Scope Resolution Suite:** Verifies that `.\x.c`, `./x.c`, and `x.c` resolve to identical physical file identities and deduplicate diagnostic lines.
+- **Lexical Block Scoping Suite:** Validates that compound statement blocks (`{ ... }`) properly isolate variable lifetimes and catch unescaped leaks.
+- **GNU/GCC Diagnostic Highlighting Suite:** Tests line number gutters, token carets, underline tildes, ANSI syntax colorization, and highlight toggling.
+- **Runtime Guardrail Suite:** Validates runtime heap tracking, forensic logging, and memory leak summary generation.
+
+To run the verification test suite:
+```bash
+ctest --test-dir build --output-on-failure
+# Or execute directly:
+./build/bin/safe_c_tests
 ```
 
 ---

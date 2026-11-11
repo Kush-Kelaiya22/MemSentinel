@@ -6,3 +6,6 @@
 - **[Lexical Block Scoping](Lexical-Scoping)**
 - **[Toolchain Integration](Toolchain-Integration)**
 - **[GNU/GCC Highlighting](GNU-GCC-Diagnostic-Highlighting)**
+- **[Self-Compilation](Self-Compilation)**
+- **[Binary Migration](Binary-Migration)**
+- **[Testing Suite](Testing)**

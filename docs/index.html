@@ -236,6 +236,10 @@
         <a href="#offset-tracking">Pointer Offsets</a>
         <a href="#toolchain">Toolchain Integration</a>
         <a href="#diagnostics">Diagnostics</a>
+        <a href="#self-compilation">Self-Compilation</a>
+        <a href="#binary-migration">Binary Migration</a>
+        <a href="#testing">Testing</a>
+        <a href="https://github.com/Kush-Kelaiya22/Safe-C/wiki">Wiki</a>
         <a href="https://github.com/Kush-Kelaiya22/Safe-C">Repository</a>
       </nav>
     </div>
@@ -288,19 +292,19 @@
         </thead>
         <tbody>
           <tr>
-            <td>Static Core Library</td>
+            <td>Static Core Engine</td>
             <td><code>libsafe_c_core.a</code></td>
             <td>Typestate tracker, token analyzer, diagnostic deduplicator, and invariant validator.</td>
           </tr>
           <tr>
-            <td>GCC Shared Plugin</td>
+            <td>Safe-C Shared Library (Linux)</td>
             <td><code>safe_c.so</code></td>
-            <td>Native GCC plugin loaded into the compiler pass manager.</td>
+            <td>Native GCC plugin loaded directly into the compiler pass manager via <code>-fplugin=safe_c.so</code>.</td>
           </tr>
           <tr>
-            <td>MinGW Native Addon</td>
-            <td><code>safe_c_addon.dll</code></td>
-            <td>Windows companion shared library providing memory safety inspection.</td>
+            <td>Safe-C Shared Library (Windows)</td>
+            <td><code>safe_c.dll</code></td>
+            <td>Native Windows companion shared library loaded into GCC via <code>-fplugin=safe_c.dll</code> or specs.</td>
           </tr>
           <tr>
             <td>Runtime Guardrails</td>
@@ -377,7 +381,7 @@ void invalid_buffer(void) {
       <h2>5. Toolchain Setup &amp; Invocations</h2>
       <h3>Windows (MinGW-w64) Toolchain Integration</h3>
       <p>
-        Safe-C builds the native companion addon <code>safe_c_addon.dll</code> and plugin <code>safe_c.dll</code>:
+        Safe-C builds the unified shared library <code>safe_c.dll</code> (under <code>build/bin/safe_c.dll</code>):
       </p>
       <pre><code># Direct compiler plugin invocation
 gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
@@ -422,6 +426,110 @@ tests/compile_fail/altered_pointer_free.c:4:24: note: Original allocation base w
     4 |     char* buf = (char*)malloc(32);
       |                        ^~~~~~
 compilation terminated due to memory safety violations.</code></pre>
+    </section>
+
+    <section id="self-compilation">
+      <h2>7. Self-Compilation &amp; Dogfooding</h2>
+      <p>
+        Safe-C is implemented in modern C++20 and C11, strictly dogfooding its own safety model:
+      </p>
+      <ul>
+        <li>
+          <strong>Zero Invariant Violations:</strong> All internal data structures, state tables, and AST caches adhere to Safe-C's typestate rules, ensuring zero memory leaks and zero use-after-free conditions.
+        </li>
+        <li>
+          <strong>Self-Hosting Verification:</strong> Safe-C can be built with its own plugin enabled (<code>-fplugin=safe_c</code>), passing full static analysis cleanly.
+        </li>
+      </ul>
+      <pre><code># Clone and compile Safe-C from source
+git clone https://github.com/Kush-Kelaiya22/Safe-C.git
+cd Safe-C
+
+# Configure and compile with Ninja or Make
+cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release</code></pre>
+    </section>
+
+    <section id="binary-migration">
+      <h2>8. Binary Migration &amp; Project Adoption</h2>
+      <p>
+        Safe-C provides a non-breaking, incremental path for introducing compile-time memory safety into existing C and C++ codebases:
+      </p>
+      <ul>
+        <li>
+          <strong>Zero Code Refactoring:</strong> No forced migration to smart pointers or dialect subsets. Standard <code>T*</code> pointers, pointer arithmetic (<code>ptr++</code>, <code>ptr += n</code>), <code>malloc</code>/<code>free</code>, and <code>new</code>/<code>delete</code> are preserved.
+        </li>
+        <li>
+          <strong>Audit Phase (<code>-fplugin-arg-safe_c-mode=warn</code>):</strong> Audit legacy codebases by emitting warnings without halting production builds.
+        </li>
+        <li>
+          <strong>Enforcement Phase (Default):</strong> Terminate compilation with exit code <code>1</code> whenever new memory safety hazards are introduced.
+        </li>
+        <li>
+          <strong>Selective Exemption:</strong> Exempt unmodified third-party vendor directories via <code>-DSAFE_C_DISABLE</code> or <code>export SAFE_C_DISABLE=1</code>.
+        </li>
+        <li>
+          <strong>Runtime Transition Defense:</strong> Link <code>libsafe_c_rt</code> to capture dynamic allocations across opaque library boundaries into <code>safe_c_runtime.log</code>.
+        </li>
+      </ul>
+    </section>
+
+    <section id="testing">
+      <h2>9. Testing Suite Architecture</h2>
+      <p>
+        Safe-C includes an automated verification test matrix covering all compile-time and runtime guarantees:
+      </p>
+      <table class="spec-table">
+        <thead>
+          <tr>
+            <th>Test Category</th>
+            <th>Target Function</th>
+            <th>Coverage Objective</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Compile-Fail Suite</td>
+            <td><code>test_compile_fail_cases()</code></td>
+            <td>Verifies that Double Free, Use-After-Free, Altered Base Deallocation, and Leaks halt compilation with non-zero exit codes.</td>
+          </tr>
+          <tr>
+            <td>Compile-Pass Regression Suite</td>
+            <td><code>test_compile_pass_cases()</code></td>
+            <td>Ensures idiomatic raw pointers, cursor arithmetic, and C++ RAII lifetimes compile with zero false positives.</td>
+          </tr>
+          <tr>
+            <td>Pointer Offset &amp; Invariant Suite</td>
+            <td><code>test_pointer_offset_invariants()</code></td>
+            <td>Validates that cursor offset alteration is allowed when a base variable exists, and rejected when base is lost.</td>
+          </tr>
+          <tr>
+            <td>Address Scope Resolution Suite</td>
+            <td><code>test_address_scope_resolution()</code></td>
+            <td>Confirms <code>.\x.c</code>, <code>./x.c</code>, and <code>x.c</code> resolve to identical physical paths with single-line diagnostic deduplication.</td>
+          </tr>
+          <tr>
+            <td>Lexical Block Scoping Suite</td>
+            <td><code>test_lexical_block_scope_resolution()</code></td>
+            <td>Ensures compound statement blocks (<code>{ ... }</code>) correctly isolate lifetimes and catch unescaped leaks at scope exit.</td>
+          </tr>
+          <tr>
+            <td>Diagnostic Formatting Suite</td>
+            <td><code>test_gnu_gcc_diagnostic_highlighting()</code></td>
+            <td>Validates line gutters, carets, underline tildes, ANSI colorization, and color toggle flags.</td>
+          </tr>
+          <tr>
+            <td>Runtime Guardrails Suite</td>
+            <td><code>test_runtime_guardrails()</code></td>
+            <td>Verifies runtime heap tracking, forensic logging, and memory leak summary emission.</td>
+          </tr>
+        </tbody>
+      </table>
+      <pre><code># Run complete test suite via CTest
+ctest --test-dir build --output-on-failure
+
+# Or execute test runner directly
+./build/bin/safe_c_tests</code></pre>
     </section>
   </main>
 

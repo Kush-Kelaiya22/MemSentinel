@@ -152,9 +152,6 @@ SAFE_C_API int safe_c_addon_inspect(void) {
     return check_compiler_invocations();
 }
 
-// GCC Plugin standard ABI export compatibility
-SAFE_C_API int plugin_is_GPL_compatible = 1;
-
 } // extern "C"
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {

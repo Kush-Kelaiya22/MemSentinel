@@ -79,6 +79,6 @@ jobs:
         shell: msys2 {0}
         run: |
           echo "=== Verifying Safe-C Windows Addon & Native Suite ==="
-          ls -la build/bin/safe_c_addon.dll build/bin/safe_c.dll
+          ls -la build/bin/safe_c.dll
           ./build/bin/safe_c_tests.exe
           echo "Safe-C Windows verification passed"

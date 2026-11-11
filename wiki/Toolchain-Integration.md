@@ -4,7 +4,7 @@ Safe-C provides native integration for both Windows (MinGW-w64) and POSIX/Linux 
 
 ## Windows MinGW-w64 Companion Addon & Plugin
 
-On Windows, Safe-C is built as a native companion shared library `safe_c_addon.dll` and plugin `safe_c.dll`.
+On Windows, Safe-C is built as a native shared library `safe_c.dll` (`build/bin/safe_c.dll`).
 
 ### Usage
 Run with GCC via the plugin flag or specs:
