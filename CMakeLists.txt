@@ -99,6 +99,7 @@ install(TARGETS safe_c
 
 install(DIRECTORY include/safe_c DESTINATION include)
 install(FILES src/specs/safe_c.specs DESTINATION specs)
+install(DIRECTORY tools DESTINATION .)
 install(FILES README.md LICENSE DESTINATION .)
 
 set(CPACK_PACKAGE_NAME "Safe-C")

@@ -48,6 +48,18 @@ jobs:
           g++-13 -fplugin="${PLUGIN_PATH}" -c tests/compile_pass/valid_cpp_raii.cpp -o /dev/null
           echo "=== Native Linux GCC Plugin Verification Passed ==="
 
+      - name: Package Linux Release (Linux)
+        if: runner.os == 'Linux'
+        run: cmake --build build --target package
+
+      - name: Upload Linux Package Artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Safe-C-1.0.0-Linux
+          path: build/*.tar.gz
+          retention-days: 14
+
       - name: Set up MinGW (Windows)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
@@ -88,3 +100,16 @@ jobs:
           g++ -fplugin="$(pwd)/build/bin/safe_c.dll" -c tests/compile_pass/valid_cpp_raii.cpp -o /dev/null
           ./build/bin/safe_c_tests.exe
           echo "Safe-C Windows verification passed"
+
+      - name: Package Windows Release (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: cmake --build build --target package
+
+      - name: Upload Windows Package Artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Safe-C-1.0.0-win64
+          path: build/*.zip
+          retention-days: 14

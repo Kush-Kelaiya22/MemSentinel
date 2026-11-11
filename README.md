@@ -53,25 +53,43 @@ Load the native Safe-C plugin during standard compilation:
   g++ -fplugin=build/lib/safe_c.so -c app.cpp -o app.o
   ```
 
-### 2. Auto-Loading Specs Integration
-Pass the Safe-C specs file to automatically load Safe-C across standard compiler commands:
+### 2. Universal Zero-Flag Auto-Loading Integration
+Safe-C provides a toolchain integration script that configures `gcc` and `g++` to auto-load Safe-C by default on every compilation with **zero flags or arguments needed**:
+
+```bash
+# Run integration on your current default GCC
+python tools/integrate_toolchain.py
+
+# Or specify a specific compiler path (e.g. MinGW-w64)
+python tools/integrate_toolchain.py F:\mingw-w64\mingw64\bin\gcc.exe
+```
+
+Once integrated:
+- Standard `gcc main.c` and `g++ app.cpp` automatically run Safe-C compile-time memory checks.
+- Compatible with all GCC / MinGW-w64 distributions (both plugin-enabled and non-plugin builds).
+- To uninstall anytime: `python tools/integrate_toolchain.py --uninstall`
+
+### 3. Direct GCC / G++ Plugin Invocation
+You can also invoke Safe-C explicitly via compiler flags:
+
+- **Windows (MinGW-w64):**
+  ```cmd
+  gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
+  g++ -fplugin=build/bin/safe_c.dll -c app.cpp -o app.o
+  ```
+
+- **Linux & macOS (GCC):**
+  ```bash
+  gcc -fplugin=build/lib/safe_c.so -c main.c -o main.o
+  g++ -fplugin=build/lib/safe_c.so -c app.cpp -o app.o
+  ```
+
+### 4. Auto-Loading via Specs File
 ```cmd
 gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
 g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
 gcc -specs=build/specs/safe_c.specs main.c -o app.exe
 ```
-
-### 3. Global GCC Auto-Loading (Zero Extra Flags)
-To have standard `gcc` and `g++` commands automatically load Safe-C:
-1. Find your GCC plugin directory:
-   ```cmd
-   gcc -print-file-name=plugin
-   ```
-2. Copy `safe_c.dll` (or `safe_c.so` on Linux) into that directory:
-   ```cmd
-   copy build\bin\safe_c.dll "<plugin-dir>\safe_c.dll"
-   ```
-3. Use the specs file to enable Safe-C by default.
 
 ### Disabling On Demand
 Safe-C static analysis can be bypassed for third-party libraries:
