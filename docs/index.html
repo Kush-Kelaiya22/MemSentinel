@@ -261,6 +261,11 @@
         <span class="badge">Zero Checker Binaries</span>
         <span class="badge">Cross-Platform</span>
       </div>
+      <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+        <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.0.0/Safe-C-1.0.0-win64.zip" class="badge" style="background: #2563eb; color: #fff; text-decoration: none; padding: 0.6rem 1.2rem; font-weight: 600; border-radius: 6px;">Download Windows (win64.zip)</a>
+        <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.0.0/Safe-C-1.0.0-Linux.tar.gz" class="badge" style="background: #059669; color: #fff; text-decoration: none; padding: 0.6rem 1.2rem; font-weight: 600; border-radius: 6px;">Download Linux (tar.gz)</a>
+        <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.0.0" class="badge" style="background: #374151; color: #fff; text-decoration: none; padding: 0.6rem 1.2rem; font-weight: 600; border-radius: 6px;">Release Notes v1.0.0</a>
+      </div>
     </div>
 
     <section id="overview">
@@ -383,7 +388,20 @@ void invalid_buffer(void) {
         Safe-C operates strictly as a native shared library (<code>safe_c.dll</code> on Windows, <code>safe_c.so</code> on Linux) loaded directly into GNU GCC and G++. It requires zero wrapper executables and zero shell scripts:
       </p>
 
-      <h3>1. Direct Compiler Plugin Invocation</h3>
+      <h3>1. Universal Zero-Flag Auto-Loading Integration</h3>
+      <p>
+        Use the included toolchain integration helper to configure your compiler for automatic zero-flag enforcement. Once integrated, standard <code>gcc main.c</code> and <code>g++ app.cpp</code> commands automatically run Safe-C compile-time checks without any extra flags or arguments:
+      </p>
+      <pre><code># Run integration on your default host GCC
+python tools/integrate_toolchain.py
+
+# Or specify a specific compiler path (e.g. MinGW-w64)
+python tools/integrate_toolchain.py F:\mingw-w64\mingw64\bin\gcc.exe
+
+# To uninstall anytime:
+python tools/integrate_toolchain.py --uninstall</code></pre>
+
+      <h3>2. Direct Compiler Plugin Invocation</h3>
       <pre><code># Windows (MinGW-w64):
 gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
 g++ -fplugin=build/bin/safe_c.dll -c app.cpp -o app.o
@@ -392,21 +410,16 @@ g++ -fplugin=build/bin/safe_c.dll -c app.cpp -o app.o
 gcc -fplugin=build/lib/safe_c.so -c main.c -o main.o
 g++ -fplugin=build/lib/safe_c.so -c app.cpp -o app.o</code></pre>
 
-      <h3>2. Auto-Loading Specs File</h3>
+      <h3>3. Auto-Loading Specs File</h3>
       <pre><code># Pass the specs file to compile and link seamlessly
 gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
 g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
 gcc -specs=build/specs/safe_c.specs main.c -o app.exe</code></pre>
 
-      <h3>3. Bypassing On Demand</h3>
+      <h3>4. Bypassing On Demand</h3>
       <pre><code># Bypass Safe-C when compiling legacy or vendor code
 gcc -DSAFE_C_DISABLE -c legacy.c -o legacy.o
 set SAFE_C_DISABLE=1</code></pre>
-    </section>
-set SAFE_C_DISABLE=1</code></pre>
-
-      <h3>Linux / macOS (GCC Plugin)</h3>
-      <pre><code>gcc -fplugin=build/lib/safe_c.so -c main.c -o main.o</code></pre>
     </section>
 
     <section id="diagnostics">
