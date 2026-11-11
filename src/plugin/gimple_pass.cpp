@@ -104,7 +104,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                 }
             }
 
-            // 2. Analyze Pointer Arithmetic: POINTER_PLUS_EXPR
+            // 2. Analyze Pointer Arithmetic: POINTER_PLUS_EXPR (alias with byte offset)
             if (is_gimple_assign(stmt)) {
                 enum tree_code code = gimple_assign_rhs_code(stmt);
                 if (code == POINTER_PLUS_EXPR) {
@@ -118,9 +118,6 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                         int64_t off_val = 4;
                         if (TREE_CODE(offset) == INTEGER_CST) {
                             off_val = tree_to_shwi(offset);
-                        }
-                        if (!state.can_alter_offset(base_sym, off_val)) {
-                            error_at(loc, "[Safe-C] Cannot alter pointer offset: no variable retains the original allocation base address");
                         }
                         state.register_alias(lhs_sym, base_sym, off_val);
                     }
@@ -147,9 +144,15 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
     for (const auto& [symbol, cell] : leaks) {
         (void)symbol;
         (void)cell;
-        warning_at(DECL_SOURCE_LOCATION(fun->decl), 0,
-                   "[Safe-C] memory leak detected: dynamically allocated pointer was not freed before exiting %qs",
-                   IDENTIFIER_POINTER(DECL_NAME(fun->decl)));
+        if (g_config.mode == Mode::FatalError) {
+            error_at(DECL_SOURCE_LOCATION(fun->decl),
+                     "[Safe-C] Memory leak detected: dynamically allocated pointer was not freed before exiting %qs",
+                     IDENTIFIER_POINTER(DECL_NAME(fun->decl)));
+        } else {
+            warning_at(DECL_SOURCE_LOCATION(fun->decl), 0,
+                       "[Safe-C] Memory leak detected: dynamically allocated pointer was not freed before exiting %qs",
+                       IDENTIFIER_POINTER(DECL_NAME(fun->decl)));
+        }
     }
 #else
     (void)gcc_fun_ptr;
