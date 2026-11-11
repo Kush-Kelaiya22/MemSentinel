@@ -57,55 +57,6 @@ add_subdirectory(src/plugin)
 add_subdirectory(src/runtime)
 add_subdirectory(tests)
 
-# Native Safe-C Driver Executables: safe_c, safe-c, safe-gcc, safe-g++
-add_executable(safe_c_cli src/safe_c_main.cpp)
-target_include_directories(safe_c_cli PRIVATE
-    include
-    src/core
-)
-target_link_libraries(safe_c_cli PRIVATE safe_c_core)
-set_target_properties(safe_c_cli PROPERTIES
-    OUTPUT_NAME "safe_c"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-add_executable(safe_c_hyphen src/safe_c_main.cpp)
-target_include_directories(safe_c_hyphen PRIVATE include src/core)
-target_link_libraries(safe_c_hyphen PRIVATE safe_c_core)
-set_target_properties(safe_c_hyphen PROPERTIES
-    OUTPUT_NAME "safe-c"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-add_executable(safe_gcc src/safe_c_main.cpp)
-target_include_directories(safe_gcc PRIVATE include src/core)
-target_link_libraries(safe_gcc PRIVATE safe_c_core)
-set_target_properties(safe_gcc PROPERTIES
-    OUTPUT_NAME "safe-gcc"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-add_executable(safe_gxx src/safe_c_main.cpp)
-target_include_directories(safe_gxx PRIVATE include src/core)
-target_link_libraries(safe_gxx PRIVATE safe_c_core)
-set_target_properties(safe_gxx PROPERTIES
-    OUTPUT_NAME "safe-g++"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
-# Custom targets to manage default toolchain activation
-add_custom_target(enable-default
-    COMMAND ${CMAKE_BINARY_DIR}/bin/safe_c --enable-default
-    DEPENDS safe_c_cli
-    COMMENT "Enabling Safe-C by default for host GCC toolchain"
-)
-
-add_custom_target(disable-default
-    COMMAND ${CMAKE_BINARY_DIR}/bin/safe_c --disable-default
-    DEPENDS safe_c_cli
-    COMMENT "Disabling Safe-C default auto-loading for host GCC toolchain"
-)
-
 # Packaging and Installation
 install(TARGETS safe_c_core safe_c_rt safe_c_rt_static
     ARCHIVE DESTINATION lib
@@ -113,7 +64,7 @@ install(TARGETS safe_c_core safe_c_rt safe_c_rt_static
     RUNTIME DESTINATION bin
 )
 
-install(TARGETS safe_c safe_c_cli safe_c_hyphen safe_gcc safe_gxx
+install(TARGETS safe_c
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )

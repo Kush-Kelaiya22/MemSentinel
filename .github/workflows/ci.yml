@@ -79,9 +79,12 @@ jobs:
         shell: msys2 {0}
         run: |
           echo "=== Verifying Safe-C Windows Addon & Native Suite ==="
-          ls -la build/bin/safe_c.dll build/bin/safe_c.exe build/bin/safe-c.exe build/bin/safe-gcc.exe build/bin/safe-g++.exe
-          ! ./build/bin/safe-c.exe tests/compile_fail/double_free.c
-          ! ./build/bin/safe-g++.exe tests/compile_fail/use_after_free.cpp
-          ./build/bin/safe-c.exe tests/compile_pass/valid_pointers.c -o build/bin/valid_test.exe
+          ls -la build/bin/safe_c.dll
+          ! gcc -fplugin="$(pwd)/build/bin/safe_c.dll" -c tests/compile_fail/double_free.c -o /dev/null
+          ! gcc -fplugin="$(pwd)/build/bin/safe_c.dll" -c tests/compile_fail/altered_pointer_free.c -o /dev/null
+          ! gcc -fplugin="$(pwd)/build/bin/safe_c.dll" -c tests/compile_fail/memory_leak.c -o /dev/null
+          gcc -fplugin="$(pwd)/build/bin/safe_c.dll" -c tests/compile_pass/valid_pointers.c -o /dev/null
+          gcc -fplugin="$(pwd)/build/bin/safe_c.dll" -c tests/compile_pass/valid_arithmetic.c -o /dev/null
+          g++ -fplugin="$(pwd)/build/bin/safe_c.dll" -c tests/compile_pass/valid_cpp_raii.cpp -o /dev/null
           ./build/bin/safe_c_tests.exe
           echo "Safe-C Windows verification passed"

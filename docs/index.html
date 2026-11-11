@@ -379,48 +379,30 @@ void invalid_buffer(void) {
 
     <section id="toolchain">
       <h2>5. Toolchain Setup &amp; Invocations</h2>
-      <h3>Safe-C Compiler Drivers (safe-c &amp; safe-g++)</h3>
       <p>
-        Safe-C provides direct compiler drivers named <code>safe-c</code>, <code>safe_c</code>, <code>safe-gcc</code>, and <code>safe-g++</code> that function as drop-in compilers:
+        Safe-C operates strictly as a native shared library (<code>safe_c.dll</code> on Windows, <code>safe_c.so</code> on Linux) loaded directly into GNU GCC and G++. It requires zero wrapper executables and zero shell scripts:
       </p>
-      <pre><code># Compile C with compile-time memory safety enforcement
-safe-c main.c -o main.exe
-safe_c main.c -o main.exe
-safe-gcc main.c -o main.exe
 
-# Compile C++ with compile-time memory safety enforcement
-safe-g++ app.cpp -o app.exe
+      <h3>1. Direct Compiler Plugin Invocation</h3>
+      <pre><code># Windows (MinGW-w64):
+gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
+g++ -fplugin=build/bin/safe_c.dll -c app.cpp -o app.o
 
-# Static analysis only (without compiling binary)
-safe-c --check-only main.c</code></pre>
+# Linux &amp; macOS:
+gcc -fplugin=build/lib/safe_c.so -c main.c -o main.o
+g++ -fplugin=build/lib/safe_c.so -c app.cpp -o app.o</code></pre>
 
-      <h3>Zero-Flag Default Activation</h3>
-      <p>
-        Safe-C can be activated by default across your compiler toolchain so that plain <code>gcc</code> and <code>g++</code> invocations automatically halt on memory hazards without any extra flags:
-      </p>
-      <pre><code># Enable Safe-C by default for all host GCC/G++ compilers
-safe-c --enable-default
-
-# Or enable via CMake build target
-cmake --build build --target enable-default
-
-# Check default activation status
-safe-c --status
-
-# Disable default auto-loading
-safe-c --disable-default</code></pre>
-
-      <h3>Per-Invocation Options</h3>
-      <pre><code># 1. Universal specs integration (works across ALL MinGW-w64 toolchains)
+      <h3>2. Auto-Loading Specs File</h3>
+      <pre><code># Pass the specs file to compile and link seamlessly
 gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
 g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
+gcc -specs=build/specs/safe_c.specs main.c -o app.exe</code></pre>
 
-# 2. Direct compiler plugin invocation (for plugin-enabled toolchains)
-gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
-
-# 3. Bypassing Safe-C when compiling third-party code
+      <h3>3. Bypassing On Demand</h3>
+      <pre><code># Bypass Safe-C when compiling legacy or vendor code
 gcc -DSAFE_C_DISABLE -c legacy.c -o legacy.o
 set SAFE_C_DISABLE=1</code></pre>
+    </section>
 set SAFE_C_DISABLE=1</code></pre>
 
       <h3>Linux / macOS (GCC Plugin)</h3>

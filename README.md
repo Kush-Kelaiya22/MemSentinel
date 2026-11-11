@@ -36,72 +36,48 @@ Safe-C verifies typestates and allocation bounds during compilation:
 
 ## Toolchain Setup
 
-Safe-C provides native integration for both Windows (MinGW-w64) and Linux/macOS (GCC):
+The Safe-C library is built strictly as a shared library (`safe_c.dll` on Windows, `safe_c.so` on Linux) with zero wrapper executables:
 
-### Safe-C Compiler Invocations
-Safe-C provides native compiler drivers named `safe-c`, `safe_c`, `safe-gcc`, and `safe-g++` that can be used directly in place of `gcc` or `g++`:
+### 1. Direct GCC / G++ Plugin Invocation
+Load the native Safe-C plugin during standard compilation:
 
+- **Windows (MinGW-w64):**
+  ```cmd
+  gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
+  g++ -fplugin=build/bin/safe_c.dll -c app.cpp -o app.o
+  ```
+
+- **Linux & macOS (GCC):**
+  ```bash
+  gcc -fplugin=build/lib/safe_c.so -c main.c -o main.o
+  g++ -fplugin=build/lib/safe_c.so -c app.cpp -o app.o
+  ```
+
+### 2. Auto-Loading Specs Integration
+Pass the Safe-C specs file to automatically load Safe-C across standard compiler commands:
 ```cmd
-# Compile C with compile-time memory safety enforcement:
-safe-c main.c -o main.exe
-# Or interchangeably:
-safe_c main.c -o main.exe
-safe-gcc main.c -o main.exe
-
-# Compile C++ with compile-time memory safety enforcement:
-safe-g++ app.cpp -o app.exe
-
-# Static analysis only (without producing a binary):
-safe-c --check-only main.c
+gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
+g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
+gcc -specs=build/specs/safe_c.specs main.c -o app.exe
 ```
 
-### Enable by Default (Zero-Flag Enforcement)
-Safe-C can be enabled by default across your entire toolchain, so that all standard `gcc` and `g++` invocations enforce memory safety without passing any extra flags:
+### 3. Global GCC Auto-Loading (Zero Extra Flags)
+To have standard `gcc` and `g++` commands automatically load Safe-C:
+1. Find your GCC plugin directory:
+   ```cmd
+   gcc -print-file-name=plugin
+   ```
+2. Copy `safe_c.dll` (or `safe_c.so` on Linux) into that directory:
+   ```cmd
+   copy build\bin\safe_c.dll "<plugin-dir>\safe_c.dll"
+   ```
+3. Use the specs file to enable Safe-C by default.
+
+### Disabling On Demand
+Safe-C static analysis can be bypassed for third-party libraries:
 ```cmd
-# Enable Safe-C by default for all host GCC/G++ compilers:
-safe-c --enable-default
-
-# Or enable via CMake:
-cmake --build build --target enable-default
-
-# Check current activation status:
-safe-c --status
-
-# Disable default auto-loading:
-safe-c --disable-default
-```
-
-Once enabled, simply running standard commands like:
-```cmd
-gcc -c main.c -o main.o
-g++ -c app.cpp -o app.o
-```
-will automatically inspect memory safety and halt on violations.
-
-### Manual Toolchain Setup
-If you prefer not to enable Safe-C globally, you can invoke it per build:
-
-1. **Universal Specs Flag (Works across ALL MinGW-w64 toolchains):**
-   ```cmd
-   gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
-   g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
-   ```
-2. **Direct Compiler Plugin Invocation (for plugin-enabled toolchains):**
-   ```cmd
-   gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
-   ```
-3. **Direct Safe-C Inspection:**
-   ```cmd
-   safe_c main.c
-   ```
-
-### Linux & macOS
-```bash
-# Enable by default for host GCC:
-./build/bin/safe_c --enable-default
-
-# Or load directly per compilation:
-gcc -fplugin=build/lib/safe_c.so -c main.c -o main.o
+gcc -DSAFE_C_DISABLE -c third_party.c -o third_party.o
+set SAFE_C_DISABLE=1
 ```
 
 ---
