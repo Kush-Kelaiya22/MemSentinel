@@ -41,6 +41,16 @@ execute_process(
     ERROR_QUIET
 )
 
+# Detect GCC Install Path for Specs Integration
+execute_process(
+    COMMAND ${CMAKE_C_COMPILER} -print-search-dirs
+    OUTPUT_VARIABLE GCC_SEARCH_DIRS
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+string(REGEX MATCH "install: ([^\r\n]+)" _MATCH "${GCC_SEARCH_DIRS}")
+set(GCC_INSTALL_DIR "${CMAKE_MATCH_1}")
+
 if(NOT WIN32 AND EXISTS "${GCC_PLUGIN_DIR}/include/gcc-plugin.h")
     message(STATUS "Found GCC plugin headers at: ${GCC_PLUGIN_DIR}")
     set(GCC_PLUGIN_INCLUDE_DIR "${GCC_PLUGIN_DIR}/include")
@@ -56,6 +66,24 @@ add_subdirectory(src/core)
 add_subdirectory(src/plugin)
 add_subdirectory(src/runtime)
 add_subdirectory(tests)
+
+# Default Toolchain Integration Targets
+if(GCC_INSTALL_DIR)
+    add_custom_target(enable-default
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${GCC_INSTALL_DIR}/plugin"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:safe_c> "${GCC_INSTALL_DIR}/plugin/$<TARGET_FILE_NAME:safe_c>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/specs/safe_c.specs" "${GCC_INSTALL_DIR}/specs"
+        DEPENDS safe_c
+        COMMENT "Enabling Safe-C by default for host GCC (${GCC_INSTALL_DIR})"
+    )
+
+    add_custom_target(disable-default
+        COMMAND ${CMAKE_COMMAND} -E rm -f "${GCC_INSTALL_DIR}/specs"
+        COMMENT "Disabling Safe-C default auto-loading from host GCC"
+    )
+endif()
 
 # Packaging and Installation
 install(TARGETS safe_c_core safe_c_rt safe_c_rt_static
