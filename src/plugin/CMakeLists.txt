@@ -21,8 +21,8 @@ target_include_directories(safe_c_plugin PUBLIC
 if(GCC_PLUGIN_FOUND)
     target_compile_definitions(safe_c_plugin PRIVATE HAVE_GCC_PLUGIN_HEADERS)
     target_include_directories(safe_c_plugin SYSTEM PRIVATE ${GCC_PLUGIN_INCLUDE_DIR})
-    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-        target_compile_options(safe_c_plugin PRIVATE -Wno-format-diag -Wno-pedantic)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(safe_c_plugin PRIVATE -Wno-format-diag -Wno-pedantic -fno-rtti)
     endif()
 endif()
 
