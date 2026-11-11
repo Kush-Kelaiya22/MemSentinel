@@ -37,3 +37,6 @@ memcheck_runtime.log
 # Temporary test outputs
 test_out/
 *.tmp
+
+# Private Working Architecture Notes (Excluded from repo)
+SAFE_C_ARCHITECTURE_AND_WORKING.md
