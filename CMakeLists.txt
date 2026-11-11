@@ -57,6 +57,18 @@ add_subdirectory(src/plugin)
 add_subdirectory(src/runtime)
 add_subdirectory(tests)
 
+# Native Safe-C Driver Executable for MinGW-w64 and Linux toolchains
+add_executable(safe_c_cli src/safe_c_main.cpp)
+target_include_directories(safe_c_cli PRIVATE
+    include
+    src/core
+)
+target_link_libraries(safe_c_cli PRIVATE safe_c_core)
+set_target_properties(safe_c_cli PROPERTIES
+    OUTPUT_NAME "safe_c"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
 # Packaging and Installation
 install(TARGETS safe_c_core safe_c_rt safe_c_rt_static
     ARCHIVE DESTINATION lib
@@ -64,7 +76,7 @@ install(TARGETS safe_c_core safe_c_rt safe_c_rt_static
     RUNTIME DESTINATION bin
 )
 
-install(TARGETS safe_c
+install(TARGETS safe_c safe_c_cli
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )

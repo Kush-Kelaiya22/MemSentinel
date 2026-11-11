@@ -1,6 +1,11 @@
-# Safe-C GCC Plugin Auto-Loading Specs File
-# This file instructs GCC/G++ to load the Safe-C plugin by default for all compilations.
-# To disable Safe-C, pass -DSAFE_C_DISABLE, -fplugin-arg-safe_c-disable, or set SAFE_C_DISABLE=1.
+# Safe-C Toolchain Specs File for GCC / G++ (MinGW-w64 and Linux)
+# Instructs GCC driver to invoke Safe-C static analysis before running cc1/cc1plus.
+# To disable Safe-C: pass -DSAFE_C_DISABLE, -fno-safe-c, or set SAFE_C_DISABLE=1.
 
-*self_spec:
-+ %{!DSAFE_C_DISABLE:%{!DSAFE_CPP_DISABLE:%{!fplugin-arg-safe_c-disable:%{!fplugin-arg-safe_cpp-disable:%{!fplugin*:-fplugin=safe_c}}}}}
+@c:
+safe_c %{D*&U*&A*} %{fdiagnostics-*} %i
+cc1 %(cpp_unique_options) %(cc1_options) %(invoke_as)
+
+@c++:
+safe_c %{D*&U*&A*} %{fdiagnostics-*} %i
+cc1plus %(cpp_unique_options) %(cc1_options) %(invoke_as)

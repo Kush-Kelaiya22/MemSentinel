@@ -4,17 +4,28 @@ Safe-C provides native integration for both Windows (MinGW-w64) and POSIX/Linux 
 
 ## Windows MinGW-w64 Companion Addon & Plugin
 
-On Windows, Safe-C is built as a native shared library `safe_c.dll` (`build/bin/safe_c.dll`).
+MinGW-w64 distributions vary in plugin support (official `mingw-builds` distributions are built without `--enable-plugin`, while WinLibs and MSYS2 support plugins). Safe-C supports all MinGW-w64 distributions out of the box.
 
 ### Usage
-Run with GCC via the plugin flag or specs:
-```cmd
-# Load Safe-C plugin directly
-gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
 
-# Using GCC auto-loading specs file
-gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
-```
+1. **Universal Specs File (Works across ALL MinGW-w64 toolchains):**
+   ```cmd
+   gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
+   g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
+   ```
+
+2. **Direct Compiler Plugin Invocation (for plugin-enabled toolchains):**
+   ```cmd
+   gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
+   ```
+
+3. **Standalone Static Analysis:**
+   ```cmd
+   safe_c main.c
+   ```
+
+4. **Permanent Zero-Flag Auto-Loading:**
+   Copy `build/bin/safe_c.exe` into MinGW `bin/`, and copy `src/specs/safe_c.specs` as `specs` into your GCC install directory (`gcc -print-search-dirs` under `install:`). Now plain `gcc main.c` automatically runs Safe-C on every compilation.
 
 ---
 

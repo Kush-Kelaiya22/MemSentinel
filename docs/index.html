@@ -381,15 +381,19 @@ void invalid_buffer(void) {
       <h2>5. Toolchain Setup &amp; Invocations</h2>
       <h3>Windows (MinGW-w64) Toolchain Integration</h3>
       <p>
-        Safe-C builds the unified shared library <code>safe_c.dll</code> (under <code>build/bin/safe_c.dll</code>):
+        MinGW-w64 toolchains vary in plugin support (standard <code>mingw-builds</code> is built without <code>--enable-plugin</code>, while WinLibs and MSYS2 support plugins). Safe-C supports all MinGW-w64 distributions out of the box:
       </p>
-      <pre><code># Direct compiler plugin invocation
+      <pre><code># 1. Universal specs integration (works on ALL MinGW-w64 toolchains)
+gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
+g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
+
+# 2. Direct compiler plugin invocation (for plugin-enabled toolchains)
 gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
 
-# Using GCC auto-loading specs file
-gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
+# 3. Direct front-end analysis
+safe_c main.c
 
-# Bypassing Safe-C when compiling third-party code
+# 4. Bypassing Safe-C when compiling third-party code
 gcc -DSAFE_C_DISABLE -c legacy.c -o legacy.o
 set SAFE_C_DISABLE=1</code></pre>
 

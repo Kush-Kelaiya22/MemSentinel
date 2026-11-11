@@ -36,17 +36,26 @@ Safe-C verifies typestates and allocation bounds during compilation:
 
 ## Toolchain Setup
 
-The Safe-C library is built as `safe_c` (`bin/safe_c.dll` on Windows, `lib/safe_c.so` on Linux):
+Safe-C provides native integration for both Windows (MinGW-w64) and Linux/macOS (GCC):
 
 ### Windows (MinGW-w64)
-Load the Safe-C plugin directly with GCC:
-```cmd
-gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
-```
-Or use the auto-loading spec file:
-```cmd
-gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
-```
+MinGW-w64 distributions vary in plugin support (e.g., standard `mingw-builds` is built without `--enable-plugin`, while WinLibs and MSYS2 include plugin support). Safe-C supports all of them seamlessly:
+
+1. **Universal Specs Integration (Works across ALL MinGW-w64 toolchains):**
+   ```cmd
+   gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
+   g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
+   ```
+2. **Direct Compiler Plugin Invocation (for plugin-enabled MinGW builds):**
+   ```cmd
+   gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
+   ```
+3. **Direct Safe-C Inspection:**
+   ```cmd
+   safe_c main.c
+   ```
+4. **Permanent Zero-Flag Auto-Loading:**
+   Copy `build/bin/safe_c.exe` into your MinGW `bin/` folder, and copy `src/specs/safe_c.specs` as `specs` into your GCC installation directory (`gcc -print-search-dirs` under `install:`). Now plain `gcc main.c` automatically halts on memory hazards without any extra flags!
 
 ### Linux & macOS
 Load the native GCC shared plugin `safe_c.so`:
