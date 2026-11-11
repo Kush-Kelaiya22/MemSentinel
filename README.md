@@ -26,7 +26,9 @@ Safe-C verifies typestates and allocation bounds during compilation:
 - **Use-After-Free:** Dereferencing (`*ptr`, `ptr->field`, `ptr[i]`) or reading freed pointers terminates compilation immediately with source locations of both the free site and access site.
 - **Pointer Offset Preservation:** A pointer's offset can be modified through pointer arithmetic (`++`, `--`, `+=`, `-=`) as long as there is a variable that contains the original base address. Altering an offset when no variable retains the base address halts compilation to prevent permanent loss of the deallocation target.
 - **Modified Base Deallocation:** Attempting to deallocate an interior or shifted pointer halts compilation with byte offset diagnostics.
-- **Memory Leaks:** Dynamic heap allocations remaining unescaped and unfreed at scope exit halt compilation with fatal errors.
+- **Lexical & Block Scope Analysis:** Compound statement blocks (`{ ... }`) are analyzed with full lexical scope isolation. Unfreed allocations going out of scope without escaping to an outer variable trigger fatal compile-time memory leak errors at the closing brace.
+- **Address Scope Resolution:** Path notations such as `.\x.c`, `./x.c`, `dir/../x.c`, and absolute paths resolve to identical canonical disk file identities, ensuring consistent diagnostic locus and translation unit isolation.
+- **GNU/GCC Diagnostic Formatting & Highlighting:** Diagnostics are emitted with full GCC syntax and error highlighting, including gutter line numbers, vertical separator bars, source code snippets, caret underlines (`^~~~~`), bold red error tags, bold cyan notes, and bold quoted symbols.
 - **Diagnostic Deduplication:** Each diagnostic line is emitted once per error type to ensure clear, uncluttered compiler diagnostics.
 - **Runtime Guardrails:** For dynamic or opaque external library boundaries, `libsafe_c_rt` records allocation metadata and logs violations to `safe_c_runtime.log`.
 

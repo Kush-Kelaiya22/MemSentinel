@@ -6,8 +6,15 @@
 #include <vector>
 #include <string_view>
 #include <iostream>
+#include <unordered_map>
 
 namespace safe_c::core {
+
+enum class ColorChoice {
+    Auto,
+    Always,
+    Never
+};
 
 struct Diagnostic {
     ViolationType type;
@@ -24,6 +31,9 @@ public:
 
     void set_mode(Mode mode) noexcept { mode_ = mode; }
     [[nodiscard]] Mode mode() const noexcept { return mode_; }
+
+    void set_color_mode(ColorChoice choice) noexcept { color_mode_ = choice; }
+    [[nodiscard]] ColorChoice color_mode() const noexcept { return color_mode_; }
 
     // Analyze C/C++ source code directly from string or file
     bool analyze_source(std::string_view source_code, std::string_view filename);
@@ -43,6 +53,7 @@ public:
     void clear() {
         diagnostics_.clear();
         state_ = StateTable();
+        source_line_cache_.clear();
     }
 
 private:
@@ -59,8 +70,10 @@ private:
                              const std::vector<SourceLocation>& locations);
 
     Mode mode_{Mode::FatalError};
+    ColorChoice color_mode_{ColorChoice::Auto};
     StateTable state_;
     std::vector<Diagnostic> diagnostics_;
+    std::unordered_map<std::string, std::vector<std::string>> source_line_cache_;
 };
 
 } // namespace safe_c::core

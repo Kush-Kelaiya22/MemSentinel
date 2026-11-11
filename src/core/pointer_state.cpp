@@ -4,7 +4,7 @@
 namespace safe_c::core {
 
 StateTable::StateTable(const StateTable& other)
-    : next_cell_id_(other.next_cell_id_) {
+    : next_cell_id_(other.next_cell_id_), current_scope_depth_(other.current_scope_depth_) {
     // Deep clone allocation cells
     std::unordered_map<uint64_t, std::shared_ptr<AllocationCell>> cell_map;
     for (const auto& cell : other.all_cells_) {
@@ -24,7 +24,7 @@ StateTable::StateTable(const StateTable& other)
                 }
             }
             bindings_[name] = std::make_unique<PointerBinding>(
-                name, target_cell, binding->offset_bytes()
+                name, target_cell, binding->offset_bytes(), binding->scope_depth()
             );
         }
     }
@@ -38,27 +38,79 @@ StateTable& StateTable::operator=(const StateTable& other) {
     return *this;
 }
 
+std::vector<std::pair<std::string, std::shared_ptr<AllocationCell>>> StateTable::exit_scope() {
+    std::vector<std::pair<std::string, std::shared_ptr<AllocationCell>>> leaks;
+    if (current_scope_depth_ <= 0) return leaks;
+
+    std::vector<std::string> to_remove;
+    std::unordered_set<uint64_t> reported_cells;
+
+    for (const auto& [name, binding] : bindings_) {
+        if (!binding) continue;
+        if (binding->scope_depth() >= current_scope_depth_) {
+            to_remove.push_back(name);
+            const auto& cell = binding->cell();
+            if (cell && cell->state == Typestate::Allocated && !cell->escaped) {
+                // Check if any surviving outer binding references this cell
+                bool has_outer_owner = false;
+                for (const auto& [other_name, other_b] : bindings_) {
+                    if (other_b && other_b->scope_depth() < current_scope_depth_ && other_b->cell() == cell) {
+                        has_outer_owner = true;
+                        break;
+                    }
+                }
+                if (!has_outer_owner && reported_cells.insert(cell->cell_id).second) {
+                    leaks.emplace_back(name, cell);
+                    cell->escaped = true;
+                }
+            }
+        }
+    }
+
+    for (const auto& sym : to_remove) {
+        bindings_.erase(sym);
+    }
+
+    --current_scope_depth_;
+    return leaks;
+}
+
 std::shared_ptr<AllocationCell> StateTable::register_allocation(
     const std::string& symbol,
     SourceLocation loc,
     size_t size_bytes,
-    bool is_array
+    bool is_array,
+    int scope_depth
 ) {
-    auto cell = std::make_shared<AllocationCell>(next_cell_id_++, std::move(loc), size_bytes, is_array);
+    int depth = (scope_depth > 0) ? scope_depth : current_scope_depth_;
+    auto cell = std::make_shared<AllocationCell>(next_cell_id_++, std::move(loc), size_bytes, is_array, depth);
     all_cells_.push_back(cell);
-    bindings_[symbol] = std::make_unique<PointerBinding>(symbol, cell, 0);
+
+    int binding_scope = depth;
+    auto it = bindings_.find(symbol);
+    if (it != bindings_.end() && it->second && it->second->scope_depth() < binding_scope) {
+        binding_scope = it->second->scope_depth();
+    }
+
+    bindings_[symbol] = std::make_unique<PointerBinding>(symbol, cell, 0, binding_scope);
     return cell;
 }
 
 void StateTable::register_alias(
     const std::string& target,
     const std::string& source,
-    int64_t offset_delta
+    int64_t offset_delta,
+    int scope_depth
 ) {
     auto it = bindings_.find(source);
     if (it != bindings_.end() && it->second) {
         int64_t new_offset = it->second->offset_bytes() + offset_delta;
-        bindings_[target] = std::make_unique<PointerBinding>(target, it->second->cell(), new_offset);
+        int binding_scope = (scope_depth > 0) ? scope_depth : current_scope_depth_;
+        auto target_it = bindings_.find(target);
+        if (target_it != bindings_.end() && target_it->second && target_it->second->scope_depth() < binding_scope) {
+            binding_scope = target_it->second->scope_depth();
+        }
+        bindings_[target] = std::make_unique<PointerBinding>(target, it->second->cell(), new_offset, binding_scope);
     }
 }
 

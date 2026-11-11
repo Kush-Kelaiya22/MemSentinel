@@ -396,19 +396,33 @@ set SAFE_C_DISABLE=1</code></pre>
     </section>
 
     <section id="diagnostics">
-      <h2>6. Diagnostic Output &amp; Deduplication</h2>
+      <h2>6. Diagnostic Output &amp; GNU/GCC Error Highlighting</h2>
       <p>
-        When an unsafe operation is detected, Safe-C emits standard GCC-compatible diagnostics to <code>stderr</code>
-        and terminates compilation. Each line is emitted once per violation type:
+        When an unsafe operation is detected, Safe-C emits authentic GNU/GCC-styled diagnostics to <code>stderr</code>
+        with gutter line numbers, source code snippets, caret token underlines, and ANSI syntax colorization.
+        Address scope resolution ensures <code>.\x.c</code>, <code>./x.c</code>, and <code>x.c</code> resolve to identical file identities,
+        and each line is emitted once per violation type:
       </p>
       <pre><code>tests/compile_fail/double_free.c:6:5: error: [Safe-C] Double free detected on pointer 'ptr'.
+    6 |     free(ptr); // ERROR: Double free must abort compilation
+      |     ^~~~
 tests/compile_fail/double_free.c:5:5: note: Previous deallocation occurred here:
+    5 |     free(ptr);
+      |     ^~~~
 compilation terminated due to memory safety violations.
 
 tests/compile_fail/altered_pointer_free.c:5:9: error: [Safe-C] Cannot alter pointer 'buf' offset: no variable retains the original allocation base address.
+    5 |     buf += 4;   // Pointer address altered!
+      |         ^~
 tests/compile_fail/altered_pointer_free.c:4:24: note: Original allocation occurred here:
+    4 |     char* buf = (char*)malloc(32);
+      |                        ^~~~~~
 tests/compile_fail/altered_pointer_free.c:6:5: error: [Safe-C] Attempt to free altered/interior pointer 'buf'. Address was shifted by 4 bytes before deallocation.
+    6 |     free(buf);  // ERROR: Freeing interior pointer must abort compilation
+      |     ^~~~
 tests/compile_fail/altered_pointer_free.c:4:24: note: Original allocation base was created here:
+    4 |     char* buf = (char*)malloc(32);
+      |                        ^~~~~~
 compilation terminated due to memory safety violations.</code></pre>
     </section>
   </main>

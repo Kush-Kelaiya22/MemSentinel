@@ -183,8 +183,9 @@ static void check_compiler_invocations() {
         }
     }
 
-    // Inspect files being compiled
+    // Inspect files being compiled with address scope resolution
     std::vector<std::string> files_to_check;
+    std::unordered_set<std::string> seen_canonical_paths;
     for (int i = 1; i < argc; ++i) {
         std::wstring arg = argv[i];
         if (arg.empty() || arg[0] == L'-') continue;
@@ -201,7 +202,10 @@ static void check_compiler_invocations() {
 
                 DWORD attr = GetFileAttributesA(path.c_str());
                 if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-                    files_to_check.push_back(path);
+                    std::string canon = safe_c::resolve_canonical_path(path);
+                    if (seen_canonical_paths.insert(canon).second) {
+                        files_to_check.push_back(path);
+                    }
                 }
             }
         }
