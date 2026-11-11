@@ -37,16 +37,24 @@ Safe-C verifies typestates and allocation bounds during compilation:
 ## Toolchain Setup
 
 ### Windows (MinGW-w64)
-Copy `libwinpthread-1.dll` from `build/bin/addon/` into the GCC libexec directory:
+Safe-C provides the companion addon library `safe_c_addon.dll` and plugin `safe_c.dll` under `build/bin/`:
+```bash
+# Build Safe-C
+cmake --build build --config Release
 ```
-<mingw-root>/libexec/gcc/x86_64-w64-mingw32/<version>/libwinpthread-1.dll
+Load the Safe-C plugin directly with GCC:
+```cmd
+gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
 ```
-Subsequent invocations of `gcc` and `g++` run Safe-C static analysis automatically with zero wrapper scripts and zero custom compiler flags.
+Or use the auto-loading spec file:
+```cmd
+gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
+```
 
 ### Linux & macOS
-Pass the plugin argument or place the spec file into your GCC specs directory:
+Load the native GCC shared plugin `safe_c.so`:
 ```bash
-gcc -fplugin=safe_c.so -c main.c -o main.o
+gcc -fplugin=build/lib/safe_c.so -c main.c -o main.o
 ```
 
 ---

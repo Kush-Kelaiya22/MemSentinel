@@ -2,24 +2,19 @@
 
 Safe-C provides native integration for both Windows (MinGW-w64) and POSIX/Linux (GCC).
 
-## Windows MinGW-w64 Companion Addon
+## Windows MinGW-w64 Companion Addon & Plugin
 
-On Windows, Safe-C is built as a zero-flag companion shared library: `libwinpthread-1.dll`.
-
-### Installation
-Copy `build/bin/addon/libwinpthread-1.dll` to your MinGW GCC libexec directory:
-```
-<mingw-root>/libexec/gcc/x86_64-w64-mingw32/<version>/libwinpthread-1.dll
-```
+On Windows, Safe-C is built as a native companion shared library `safe_c_addon.dll` and plugin `safe_c.dll`.
 
 ### Usage
-Every standard compilation command runs Safe-C automatically:
+Run with GCC via the plugin flag or specs:
 ```cmd
-gcc -c main.c -o main.o
-g++ -c app.cpp -o app.o
-```
+# Load Safe-C plugin directly
+gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
 
-Zero extra compiler flags, zero wrapper scripts, and zero custom binaries are needed.
+# Using GCC auto-loading specs file
+gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
+```
 
 ---
 

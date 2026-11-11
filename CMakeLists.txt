@@ -71,8 +71,8 @@ install(TARGETS safe_c_plugin
 
 if(WIN32)
     install(TARGETS safe_c_addon
-        LIBRARY DESTINATION bin/addon
-        RUNTIME DESTINATION bin/addon
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
     )
 endif()
 

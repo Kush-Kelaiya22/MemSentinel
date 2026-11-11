@@ -11,7 +11,7 @@ Safe-C is a pure compile-time memory safety plugin and toolchain companion addon
 - **[Address Scope Resolution](Address-Scope-Resolution)**: How Safe-C canonicalizes file paths (`.\x.c` vs `x.c`) and isolates translation units.
 - **[Pointer Offsets & Invariants](Pointer-Offsets-and-Invariants)**: Rules governing pointer arithmetic and base address preservation.
 - **[Lexical Scope Resolution](Lexical-Scoping)**: Block-level scoping (`{ ... }`), variable lifetime, and scope-exit leak detection.
-- **[Toolchain Integration](Toolchain-Integration)**: Native GCC plugin (`safe_c.so`) on Linux and zero-flag companion addon (`libwinpthread-1.dll`) on MinGW-w64.
+- **[Toolchain Integration](Toolchain-Integration)**: Native GCC plugin (`safe_c.so`) on Linux and Windows companion addon (`safe_c_addon.dll`) on MinGW-w64.
 - **[GNU/GCC Diagnostic Highlighting](GNU-GCC-Diagnostic-Highlighting)**: Gutter line numbers, token caret underlines, and terminal ANSI highlighting.
 
 ---

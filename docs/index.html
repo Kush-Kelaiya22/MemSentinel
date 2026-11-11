@@ -299,8 +299,8 @@
           </tr>
           <tr>
             <td>MinGW Native Addon</td>
-            <td><code>libwinpthread-1.dll</code></td>
-            <td>Companion shared library installed in GCC libexec directory for zero-flag automatic execution.</td>
+            <td><code>safe_c_addon.dll</code></td>
+            <td>Windows companion shared library providing memory safety inspection.</td>
           </tr>
           <tr>
             <td>Runtime Guardrails</td>
@@ -375,24 +375,22 @@ void invalid_buffer(void) {
 
     <section id="toolchain">
       <h2>5. Toolchain Setup &amp; Invocations</h2>
-      <h3>Windows (MinGW-w64) Automatic Addon</h3>
+      <h3>Windows (MinGW-w64) Toolchain Integration</h3>
       <p>
-        Copy <code>libwinpthread-1.dll</code> from <code>build/bin/addon/</code> to:
+        Safe-C builds the native companion addon <code>safe_c_addon.dll</code> and plugin <code>safe_c.dll</code>:
       </p>
-      <pre><code>F:/mingw-w64/mingw64/libexec/gcc/x86_64-w64-mingw32/15.2.0/libwinpthread-1.dll</code></pre>
-      <p>
-        Every invocation of <code>gcc.exe</code> or <code>g++.exe</code> automatically runs Safe-C
-        analysis with zero wrapper scripts and zero custom compiler flags:
-      </p>
-      <pre><code># Standard compile command (Safe-C runs automatically)
-gcc -c main.c -o main.o
+      <pre><code># Direct compiler plugin invocation
+gcc -fplugin=build/bin/safe_c.dll -c main.c -o main.o
 
-# Bypassing Safe-C when compiling trusted legacy third-party source
+# Using GCC auto-loading specs file
+gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
+
+# Bypassing Safe-C when compiling third-party code
 gcc -DSAFE_C_DISABLE -c legacy.c -o legacy.o
 set SAFE_C_DISABLE=1</code></pre>
 
       <h3>Linux / macOS (GCC Plugin)</h3>
-      <pre><code>gcc -fplugin=safe_c.so -c main.c -o main.o</code></pre>
+      <pre><code>gcc -fplugin=build/lib/safe_c.so -c main.c -o main.o</code></pre>
     </section>
 
     <section id="diagnostics">

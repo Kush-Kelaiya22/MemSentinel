@@ -74,18 +74,11 @@ jobs:
         shell: msys2 {0}
         run: ctest --test-dir build --output-on-failure
 
-      - name: Test Native MinGW Addon Execution (Windows)
+      - name: Verify Safe-C Windows Addon & Native Suite
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: |
-          GCC_VERSION=$(gcc -dumpversion)
-          TARGET_DIR="/ucrt64/libexec/gcc/x86_64-w64-mingw32/${GCC_VERSION}"
-          echo "Target libexec dir: ${TARGET_DIR}"
-          if [ -d "${TARGET_DIR}" ]; then
-            cp -f build/bin/addon/libwinpthread-1.dll "${TARGET_DIR}/libwinpthread-1.dll"
-            echo "Installed companion addon to MinGW libexec"
-            ! gcc -c tests/compile_fail/double_free.c
-            gcc -c tests/compile_pass/valid_pointers.c
-            gcc -c tests/compile_pass/valid_arithmetic.c
-            echo "Automatic MinGW toolchain addon verification passed"
-          fi
+          echo "=== Verifying Safe-C Windows Addon & Native Suite ==="
+          ls -la build/bin/safe_c_addon.dll build/bin/safe_c.dll
+          ./build/bin/safe_c_tests.exe
+          echo "Safe-C Windows verification passed"

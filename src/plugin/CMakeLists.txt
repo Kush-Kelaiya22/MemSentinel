@@ -60,9 +60,9 @@ if(WIN32)
 
     set_target_properties(safe_c_addon PROPERTIES
         PREFIX ""
-        OUTPUT_NAME "libwinpthread-1"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/addon"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/addon"
+        OUTPUT_NAME "safe_c_addon"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
         CXX_STANDARD 20
         CXX_STANDARD_REQUIRED ON
     )
