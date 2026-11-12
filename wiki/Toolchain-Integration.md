@@ -43,9 +43,7 @@ Safe-C can be globally disabled/enabled, switched to warning mode, or partially 
 | `-DSAFE_C_NO_UAF` | `-fplugin-arg-safe_c-uaf=off` | Turn off use-after-free checks |
 | `-DSAFE_C_NO_BOUNDS` | `-fplugin-arg-safe_c-bounds=off` | Turn off static bounds checks |
 | `-DSAFE_C_NO_NULL` | `-fplugin-arg-safe_c-null=off` | Turn off null pointer dereference checks |
-| `-DSAFE_C_NO_UNINIT` | `-fplugin-arg-safe_c-uninit=off` | Turn off uninitialized pointer checks |
-| `-DSAFE_C_NO_MISMATCH` | `-fplugin-arg-safe_c-mismatch=off` | Turn off mismatched deallocator checks |
-| `-DSAFE_C_NO_DANGLING` | `-fplugin-arg-safe_c-dangling=off` | Turn off dangling local-address return errors |
 | `-DSAFE_C_NO_ARITHMETIC` | `-fplugin-arg-safe_c-arithmetic=off` | Turn off pointer-arithmetic base checks |
+| `-DSAFE_C_NO_ITERATOR` | `-fplugin-arg-safe_c-iterator=off` | Turn off C++ container iterator invalidation checks |
 
 Environment variables: `SAFE_C_DISABLE=1`, `SAFE_C_ENABLE=1`, `SAFE_C_MODE=warn|fatal|off`.
