@@ -193,7 +193,7 @@ std::optional<ViolationType> StateTable::register_free(
     if (it == bindings_.end() || !it->second || !it->second->cell()) {
         out_cell = nullptr;
         out_offset = 0;
-        return std::nullopt;
+        return ViolationType::UnallocatedFree;
     }
 
     auto& binding = it->second;
@@ -205,9 +205,9 @@ std::optional<ViolationType> StateTable::register_free(
         return std::nullopt;
     }
 
-    // Non-heap pointer free checks are handled natively by GCC's -Wfree-nonheap-object.
+    // Cannot free stack addresses or uninitialized pointers
     if (out_cell->kind == AllocKind::Stack || out_cell->kind == AllocKind::Uninitialized) {
-        return std::nullopt;
+        return ViolationType::UnallocatedFree;
     }
 
     // Invariant Check 1: Pointer Alteration Before Free (Interior Offset Free)
@@ -220,7 +220,13 @@ std::optional<ViolationType> StateTable::register_free(
         return ViolationType::DoubleFree;
     }
 
-    (void)expected_kind;
+    // Invariant Check 3: Mismatched Allocator / Deallocator (e.g., new[] with delete, malloc with delete)
+    if (expected_kind != AllocKind::Unknown && out_cell->kind != AllocKind::Unknown &&
+        is_heap_kind(out_cell->kind) && out_cell->kind != expected_kind) {
+        out_cell->state = Typestate::Freed;
+        out_cell->free_site = std::move(loc);
+        return ViolationType::MismatchedDealloc;
+    }
 
     // Successfully transition state to FREED
     out_cell->state = Typestate::Freed;
@@ -243,6 +249,9 @@ std::optional<ViolationType> StateTable::validate_access(
     out_cell = it->second->cell();
     if (out_cell->kind == AllocKind::Null) {
         return ViolationType::NullPointerDeref;
+    }
+    if (out_cell->kind == AllocKind::Uninitialized) {
+        return ViolationType::UninitializedPointer;
     }
     if (out_cell->state == Typestate::Freed) {
         return ViolationType::UseAfterFree;

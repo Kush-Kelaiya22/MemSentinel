@@ -63,6 +63,9 @@ void parse_plugin_arguments(int argc, struct plugin_argument *argv) {
         { "uaf",         "no-uaf",         &PluginConfig::check_uaf },
         { "bounds",      "no-bounds",      &PluginConfig::check_bounds },
         { "null",        "no-null",        &PluginConfig::check_null },
+        { "uninit",      "no-uninit",      &PluginConfig::check_uninit },
+        { "dangling",    "no-dangling",    &PluginConfig::check_dangling },
+        { "mismatch",    "no-mismatch",    &PluginConfig::check_mismatch },
         { "arithmetic",  "no-arithmetic",  &PluginConfig::check_arithmetic },
         { "iterator",    "no-iterator",    &PluginConfig::check_iterator },
     };

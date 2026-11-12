@@ -109,6 +109,9 @@ When integrated via `specs`, individual translation units or builds can enable, 
 | `-DSAFE_C_NO_UAF` | `-fplugin-arg-safe_c-uaf=off` | Disable use-after-free checks |
 | `-DSAFE_C_NO_BOUNDS` | `-fplugin-arg-safe_c-bounds=off` | Disable static spatial bounds checks |
 | `-DSAFE_C_NO_NULL` | `-fplugin-arg-safe_c-null=off` | Disable null pointer dereference checks |
+| `-DSAFE_C_NO_UNINIT` | `-fplugin-arg-safe_c-uninit=off` | Disable uninitialized pointer checks |
+| `-DSAFE_C_NO_MISMATCH` | `-fplugin-arg-safe_c-mismatch=off` | Disable mismatched allocator/deallocator and non-heap free checks |
+| `-DSAFE_C_NO_DANGLING` | `-fplugin-arg-safe_c-dangling=off` | Disable dangling local-address return errors |
 | `-DSAFE_C_NO_ARITHMETIC` | `-fplugin-arg-safe_c-arithmetic=off` | Disable pointer-arithmetic base-retention checks |
 | `-DSAFE_C_NO_ITERATOR` | `-fplugin-arg-safe_c-iterator=off` | Disable C++ container iterator and data-handle invalidation checks |
 

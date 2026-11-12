@@ -259,6 +259,26 @@ static void report_dealloc_error(
             }
         }
         break;
+    case safe_c::ViolationType::MismatchedDealloc:
+        if (!cfg.check_mismatch) return;
+        SAFEC_DIAG(loc, "mismatched deallocation on pointer %qs [-Wsafec-mismatched-dealloc]", name_or_ptr);
+        if (cell) {
+            auto orig = cell_alloc_loc.find(cell->cell_id);
+            if (orig != cell_alloc_loc.end() && orig->second.loc != UNKNOWN_LOCATION) {
+                inform(orig->second.loc, "allocated here with incompatible allocator");
+            }
+        }
+        break;
+    case safe_c::ViolationType::UnallocatedFree:
+        if (!cfg.check_mismatch) return;
+        SAFEC_DIAG(loc, "deallocation of non-heap pointer %qs [-Wsafec-invalid-free]", name_or_ptr);
+        if (cell) {
+            auto orig = cell_alloc_loc.find(cell->cell_id);
+            if (orig != cell_alloc_loc.end() && orig->second.loc != UNKNOWN_LOCATION) {
+                inform(orig->second.loc, "declared here");
+            }
+        }
+        break;
     default:
         break;
     }
@@ -301,6 +321,16 @@ static void report_access_error(
     case safe_c::ViolationType::NullPointerDeref:
         if (!cfg.check_null) return;
         SAFEC_DIAG(loc, "null pointer dereference of %qs [-Wsafec-null-deref]", name_or_ptr);
+        break;
+    case safe_c::ViolationType::UninitializedPointer:
+        if (!cfg.check_uninit) return;
+        SAFEC_DIAG(loc, "%qs may be used uninitialized [-Wsafec-uninitialized]", name_or_ptr);
+        if (cell) {
+            auto a_it = cell_alloc_loc.find(cell->cell_id);
+            if (a_it != cell_alloc_loc.end() && a_it->second.loc != UNKNOWN_LOCATION) {
+                inform(a_it->second.loc, "%qs was declared here", name_or_ptr);
+            }
+        }
         break;
     default:
         break;
@@ -576,6 +606,24 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
             }
         }
 
+        auto ensure_default_def_tracked = [&](tree ptr_ssa) {
+            if (!ptr_ssa || TREE_CODE(ptr_ssa) != SSA_NAME) return;
+            if (!SSA_NAME_IS_DEFAULT_DEF(ptr_ssa)) return;
+            tree var = SSA_NAME_VAR(ptr_ssa);
+            if (!var || TREE_CODE(var) != VAR_DECL || is_global_var(var)) return;
+
+            std::string sym = ssa_sym(ptr_ssa);
+            if (!state.has_symbol(sym)) {
+                auto cell = state.register_special(sym, safe_c::SourceLocation{}, safe_c::AllocKind::Uninitialized);
+                const char* vname = DECL_NAME(var) ? IDENTIFIER_POINTER(DECL_NAME(var)) : "";
+                location_t decl_loc = DECL_SOURCE_LOCATION(var);
+                sym_alloc_loc[sym] = {decl_loc, vname};
+                if (cell) {
+                    cell_alloc_loc[cell->cell_id] = {decl_loc, vname};
+                }
+            }
+        };
+
         for (gimple_stmt_iterator gsi = gsi_start_bb(bb); !gsi_end_p(gsi); gsi_next(&gsi)) {
             gimple *stmt = gsi_stmt(gsi);
             if (gimple_clobber_p(stmt)) {
@@ -649,6 +697,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                     if (gimple_call_num_args(stmt) >= 2) {
                         tree old_arg = gimple_call_arg(stmt, 0);
                         if (old_arg && TREE_CODE(old_arg) == SSA_NAME) {
+                            ensure_default_def_tracked(old_arg);
                             std::string old_sym = ssa_sym(old_arg);
                             if (state.has_symbol(old_sym)) {
                                 std::shared_ptr<core::AllocationCell> cell;
@@ -686,6 +735,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                             continue;
                         }
                         if (arg && TREE_CODE(arg) == SSA_NAME) {
+                            ensure_default_def_tracked(arg);
                             std::string sym_name = ssa_sym(arg);
                             if (!state.has_symbol(sym_name)) {
                                 continue;
@@ -744,6 +794,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                     tree dst = gimple_call_arg(stmt, ptr_arg_idx);
                     tree len = gimple_call_arg(stmt, sz_arg_idx);
                     if (dst && TREE_CODE(dst) == SSA_NAME) {
+                        ensure_default_def_tracked(dst);
                         std::string dst_sym = ssa_sym(dst);
                         size_t write_sz = 0;
                         cst_to_size(len, write_sz);
@@ -843,8 +894,33 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
             if (gimple_code(stmt) == GIMPLE_RETURN) {
                 greturn *ret = as_a<greturn*>(stmt);
                 tree val = gimple_return_retval(ret);
-                if (val && TREE_CODE(val) == SSA_NAME) {
-                    state.mark_escaped(ssa_sym(val));
+                if (val && TREE_CODE(val) == ADDR_EXPR) {
+                    tree target = TREE_OPERAND(val, 0);
+                    if (safe_c::plugin::g_config.check_dangling && target && TREE_CODE(target) == VAR_DECL && !is_global_var(target)) {
+                        const char* vname = DECL_NAME(target) ? IDENTIFIER_POINTER(DECL_NAME(target)) : nullptr;
+                        SAFEC_DIAG(loc, "function returns address of local variable %qs [-Wsafec-return-local-addr]",
+                                   vname ? vname : "local");
+                        location_t decl_loc = DECL_SOURCE_LOCATION(target);
+                        if (decl_loc != UNKNOWN_LOCATION) {
+                            inform(decl_loc, "declared here");
+                        }
+                    }
+                } else if (val && TREE_CODE(val) == SSA_NAME) {
+                    std::string ret_sym = ssa_sym(val);
+                    const auto* binding = state.get_binding(ret_sym);
+                    if (binding && binding->cell() && binding->cell()->kind == safe_c::AllocKind::Stack) {
+                        if (safe_c::plugin::g_config.check_dangling) {
+                            std::string dname = resolve_display_name(val, ret_sym, binding->cell(), sym_alloc_loc, cell_alloc_loc);
+                            SAFEC_DIAG(loc, "function returns address of local variable %qs [-Wsafec-return-local-addr]",
+                                       dname.empty() ? "local" : dname.c_str());
+                            auto a_it = cell_alloc_loc.find(binding->cell()->cell_id);
+                            if (a_it != cell_alloc_loc.end() && a_it->second.loc != UNKNOWN_LOCATION) {
+                                inform(a_it->second.loc, "declared here");
+                            }
+                        }
+                    } else {
+                        state.mark_escaped(ret_sym);
+                    }
                 }
             }
 
@@ -860,6 +936,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
             }
 
             if (deref_ptr && TREE_CODE(deref_ptr) == SSA_NAME) {
+                ensure_default_def_tracked(deref_ptr);
                 std::string sym_name = ssa_sym(deref_ptr);
                 if (g_config.check_iterator) {
                     std::string dummy;

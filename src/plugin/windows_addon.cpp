@@ -87,6 +87,12 @@ int check_compiler_invocations() {
             checks.bounds = false;
         } else if (arg == L"-DSAFE_C_NO_NULL" || arg == L"-fplugin-arg-safe_c-null=off" || arg == L"-fplugin-arg-safe_c-no-null") {
             checks.null_deref = false;
+        } else if (arg == L"-DSAFE_C_NO_UNINIT" || arg == L"-fplugin-arg-safe_c-uninit=off" || arg == L"-fplugin-arg-safe_c-no-uninit") {
+            checks.uninit = false;
+        } else if (arg == L"-DSAFE_C_NO_DANGLING" || arg == L"-fplugin-arg-safe_c-dangling=off" || arg == L"-fplugin-arg-safe_c-no-dangling") {
+            checks.dangling = false;
+        } else if (arg == L"-DSAFE_C_NO_MISMATCH" || arg == L"-fplugin-arg-safe_c-mismatch=off" || arg == L"-fplugin-arg-safe_c-no-mismatch") {
+            checks.mismatch = false;
         } else if (arg == L"-DSAFE_C_NO_ARITHMETIC" || arg == L"-fplugin-arg-safe_c-arithmetic=off" || arg == L"-fplugin-arg-safe_c-no-arithmetic") {
             checks.arithmetic = false;
         } else if (arg == L"-DSAFE_C_NO_ITERATOR" || arg == L"-fplugin-arg-safe_c-iterator=off" || arg == L"-fplugin-arg-safe_c-no-iterator") {

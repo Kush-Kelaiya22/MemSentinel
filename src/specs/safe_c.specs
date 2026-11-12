@@ -11,8 +11,11 @@
 #   -DSAFE_C_NO_UAF           Disable use-after-free checks
 #   -DSAFE_C_NO_BOUNDS        Disable static spatial bounds checks
 #   -DSAFE_C_NO_NULL          Disable null pointer dereference checks
+#   -DSAFE_C_NO_UNINIT        Disable uninitialized pointer checks
+#   -DSAFE_C_NO_MISMATCH      Disable mismatched allocator/deallocator checks
+#   -DSAFE_C_NO_DANGLING      Disable dangling local-address return errors
 #   -DSAFE_C_NO_ARITHMETIC    Disable pointer-arithmetic base-retention checks
 #   -DSAFE_C_NO_ITERATOR      Disable C++ container iterator invalidation checks
 
 *self_spec:
-+ %{!fplugin-arg-safe_c-disable:%{!fplugin-arg-safe_cpp-disable:%{DSAFE_C_ENABLE|!DSAFE_C_DISABLE:%{DSAFE_C_ENABLE|!DSAFE_CPP_DISABLE:%{!fplugin*:-fplugin=safe_c %{DSAFE_C_ENABLE:-fplugin-arg-safe_c-enable} %{DSAFE_C_WARN_ONLY:-fplugin-arg-safe_c-mode=warn} %{DSAFE_C_FATAL:-fplugin-arg-safe_c-mode=fatal} %{DSAFE_C_NO_LEAKS:-fplugin-arg-safe_c-leaks=off} %{DSAFE_C_NO_DOUBLE_FREE:-fplugin-arg-safe_c-double-free=off} %{DSAFE_C_NO_UAF:-fplugin-arg-safe_c-uaf=off} %{DSAFE_C_NO_BOUNDS:-fplugin-arg-safe_c-bounds=off} %{DSAFE_C_NO_NULL:-fplugin-arg-safe_c-null=off} %{DSAFE_C_NO_ARITHMETIC:-fplugin-arg-safe_c-arithmetic=off} %{DSAFE_C_NO_ITERATOR:-fplugin-arg-safe_c-iterator=off}}}}}}
++ %{!fplugin-arg-safe_c-disable:%{!fplugin-arg-safe_cpp-disable:%{DSAFE_C_ENABLE|!DSAFE_C_DISABLE:%{DSAFE_C_ENABLE|!DSAFE_CPP_DISABLE:%{!fplugin*:-fplugin=safe_c %{DSAFE_C_ENABLE:-fplugin-arg-safe_c-enable} %{DSAFE_C_WARN_ONLY:-fplugin-arg-safe_c-mode=warn} %{DSAFE_C_FATAL:-fplugin-arg-safe_c-mode=fatal} %{DSAFE_C_NO_LEAKS:-fplugin-arg-safe_c-leaks=off} %{DSAFE_C_NO_DOUBLE_FREE:-fplugin-arg-safe_c-double-free=off} %{DSAFE_C_NO_UAF:-fplugin-arg-safe_c-uaf=off} %{DSAFE_C_NO_BOUNDS:-fplugin-arg-safe_c-bounds=off} %{DSAFE_C_NO_NULL:-fplugin-arg-safe_c-null=off} %{DSAFE_C_NO_UNINIT:-fplugin-arg-safe_c-uninit=off} %{DSAFE_C_NO_MISMATCH:-fplugin-arg-safe_c-mismatch=off} %{DSAFE_C_NO_DANGLING:-fplugin-arg-safe_c-dangling=off} %{DSAFE_C_NO_ARITHMETIC:-fplugin-arg-safe_c-arithmetic=off} %{DSAFE_C_NO_ITERATOR:-fplugin-arg-safe_c-iterator=off}} %{!Wno-return-local-addr:%{!DSAFE_C_NO_DANGLING:%{!DSAFE_C_WARN_ONLY:-Werror=return-local-addr}}}}}}}

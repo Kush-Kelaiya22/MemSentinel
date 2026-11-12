@@ -415,7 +415,7 @@
     <div class="container header-inner">
       <a class="brand" href="#">
         <span>Safe-C</span>
-        <span class="version-pill">v1.2.0</span>
+        <span class="version-pill">v1.2.1</span>
       </a>
       <nav class="nav" aria-label="Primary navigation">
         <a href="#checks">Checks</a>
@@ -433,16 +433,16 @@
       <h1>Compile-Time Memory Safety for GCC and G++</h1>
       <p class="hero-lead">
         Safe-C plugs directly into GCC and G++ to check heap lifetimes, pointer arithmetic,
-        spatial bounds, null dereferences, and STL iterator invalidation while compiling
-        standard C and C++ code—focusing on bugs that stock GCC does not catch on its own.
+        spatial bounds, deallocator matching, null or uninitialized dereferences, and STL iterator invalidation while compiling
+        standard C and C++ code.
       </p>
       <div class="meta-line">
         C11/C17 &middot; C++20 &middot; Linux (GCC plugin + specs) &amp; Windows (MinGW-w64) &middot; AGPLv3
       </div>
       <div class="btn-row">
-        <a class="btn btn-primary" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.2.0/Safe-C-1.2.0-Linux.tar.gz">Download Linux (.tar.gz)</a>
-        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.2.0/Safe-C-1.2.0-win64.zip">Download Windows (.zip)</a>
-        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.2.0">Release Notes</a>
+        <a class="btn btn-primary" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.2.1/Safe-C-1.2.1-Linux.tar.gz">Download Linux (.tar.gz)</a>
+        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.2.1/Safe-C-1.2.1-win64.zip">Download Windows (.zip)</a>
+        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.2.1">Release Notes</a>
         <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C">Repository</a>
       </div>
     </div>
@@ -490,6 +490,18 @@
               <td><code>-DSAFE_C_NO_ARITHMETIC</code></td>
             </tr>
             <tr>
+              <td>Allocator mismatch</td>
+              <td><code>[-Wsafec-mismatched-dealloc]</code></td>
+              <td>Mixing <code>malloc</code>/<code>free</code>, <code>new</code>/<code>delete</code>, and <code>new[]</code>/<code>delete[]</code></td>
+              <td><code>-DSAFE_C_NO_MISMATCH</code></td>
+            </tr>
+            <tr>
+              <td>Non-heap free</td>
+              <td><code>[-Wsafec-invalid-free]</code></td>
+              <td>Passing a stack or non-heap address to a heap deallocator</td>
+              <td><code>-DSAFE_C_NO_MISMATCH</code></td>
+            </tr>
+            <tr>
               <td>Out-of-bounds access</td>
               <td><code>[-Wsafec-bounds]</code></td>
               <td>Constant negative or out-of-range indexing/dereference beyond known allocation size</td>
@@ -500,6 +512,18 @@
               <td><code>[-Wsafec-null-deref]</code></td>
               <td>Dereferencing a pointer known to hold <code>NULL</code> or <code>nullptr</code> on that path</td>
               <td><code>-DSAFE_C_NO_NULL</code></td>
+            </tr>
+            <tr>
+              <td>Uninitialized dereference</td>
+              <td><code>[-Wsafec-uninitialized]</code></td>
+              <td>Dereferencing a local pointer before any assignment</td>
+              <td><code>-DSAFE_C_NO_UNINIT</code></td>
+            </tr>
+            <tr>
+              <td>Dangling stack return</td>
+              <td><code>[-Wsafec-return-local-addr]</code></td>
+              <td>Returning the address of a function-local stack variable</td>
+              <td><code>-DSAFE_C_NO_DANGLING</code></td>
             </tr>
             <tr>
               <td>Iterator &amp; data handle invalidation</td>
@@ -710,6 +734,21 @@ python tools/integrate_toolchain.py --uninstall</code></pre>
               <td>Disable null dereference checks.</td>
             </tr>
             <tr>
+              <td><code>-DSAFE_C_NO_UNINIT</code></td>
+              <td><code>-fplugin-arg-safe_c-uninit=off</code></td>
+              <td>Disable uninitialized pointer checks.</td>
+            </tr>
+            <tr>
+              <td><code>-DSAFE_C_NO_MISMATCH</code></td>
+              <td><code>-fplugin-arg-safe_c-mismatch=off</code></td>
+              <td>Disable allocator/deallocator mismatch and non-heap free checks.</td>
+            </tr>
+            <tr>
+              <td><code>-DSAFE_C_NO_DANGLING</code></td>
+              <td><code>-fplugin-arg-safe_c-dangling=off</code></td>
+              <td>Disable local stack-address return checks.</td>
+            </tr>
+            <tr>
               <td><code>-DSAFE_C_NO_ARITHMETIC</code></td>
               <td><code>-fplugin-arg-safe_c-arithmetic=off</code></td>
               <td>Disable modified-base pointer arithmetic checks.</td>
@@ -753,7 +792,7 @@ tests/compile_fail/altered_pointer_free.c:4:24: note: original allocation base c
         <span>Safe-C &middot; Licensed under AGPLv3</span>
         <nav class="footer-nav" aria-label="Footer navigation">
           <a href="https://github.com/Kush-Kelaiya22/Safe-C">Repository</a>
-          <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.2.0">Releases</a>
+          <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.2.1">Releases</a>
           <a href="https://github.com/Kush-Kelaiya22/Safe-C/issues">Issues</a>
           <a href="https://github.com/Kush-Kelaiya22/Safe-C/discussions">Discussions</a>
           <a href="https://github.com/Kush-Kelaiya22/Safe-C/tree/main/wiki">Docs / Wiki</a>
