@@ -14,8 +14,12 @@ namespace safe_c {
 // Canonicalize and resolve true file path across ./, .\, .., symlinks, and casing
 inline std::string resolve_canonical_path(std::string_view path_str) {
     if (path_str.empty()) return {};
+    std::string normalized(path_str);
+    for (char& c : normalized) {
+        if (c == '\\') c = '/';
+    }
     std::error_code ec;
-    std::filesystem::path p(path_str);
+    std::filesystem::path p(normalized);
     std::filesystem::path canon;
     if (std::filesystem::exists(p, ec)) {
         canon = std::filesystem::canonical(p, ec);
@@ -33,6 +37,16 @@ inline std::string resolve_canonical_path(std::string_view path_str) {
 #endif
     return res;
 }
+
+enum class AllocKind {
+    Unknown,
+    Malloc,     // malloc, calloc, realloc, aligned_alloc -> freed with free/realloc
+    New,        // operator new -> freed with delete
+    NewArray,   // operator new[] -> freed with delete[]
+    Stack,      // address of local stack variable -> never freed, cannot escape via return
+    Null,       // NULL / nullptr -> free is no-op, deref is NullPointerDeref
+    Uninitialized // uninitialized local pointer -> deref is UninitializedPointer
+};
 
 enum class Typestate {
     Unallocated,
