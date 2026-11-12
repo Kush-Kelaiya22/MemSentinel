@@ -22,8 +22,10 @@ The authoritative single-page technical specification and reference manual is pu
 
 Safe-C verifies typestates and allocation bounds during compilation:
 
-- **Double Free:** Deallocation (`free`, `delete`, `delete[]`, `realloc`) on an already freed pointer halts compilation immediately.
-- **Use-After-Free:** Dereferencing (`*ptr`, `ptr->field`, `ptr[i]`) or reading freed pointers terminates compilation immediately with source locations of both the free site and access site.
+- **Double Free & Mismatched Deallocation:** Deallocation (`free`, `delete`, `delete[]`, `realloc`) on an already freed pointer or with an incompatible allocator (`new[]` + `delete`, `malloc` + `delete`) halts compilation immediately.
+- **Use-After-Free & Spatial Bounds (Out-of-Bounds):** Dereferencing (`*ptr`, `ptr->field`, `ptr[i]`, `memcpy`/`memmove`/`memset`) freed pointers or accessing beyond known allocation bounds terminates compilation with source locations of both the allocation/free site and access site.
+- **Null, Uninitialized & Dangling Stack Pointers:** Dereferencing `NULL`/`nullptr` or uninitialized pointers, or returning the address of a local stack variable (`return &local`), halts compilation immediately.
+- **CFG & Escape Analysis (Zero False Positives):** Reverse-post-order control-flow analysis with `GIMPLE_PHI` merging, null-branch awareness (`if (p != NULL) free(p);`), `realloc` ownership transfer, `free(NULL)`/`delete nullptr` no-ops, function return escapes, out-parameter/struct-store escapes, and C++ STL/RAII containers (`std::vector`, `std::unique_ptr`) including placement `new`.
 - **Pointer Offset Preservation:** A pointer's offset can be modified through pointer arithmetic (`++`, `--`, `+=`, `-=`) as long as there is a variable that contains the original base address. Altering an offset when no variable retains the base address halts compilation to prevent permanent loss of the deallocation target.
 - **Modified Base Deallocation:** Attempting to deallocate an interior or shifted pointer halts compilation with byte offset diagnostics.
 - **Lexical & Block Scope Analysis:** Compound statement blocks (`{ ... }`) are analyzed with full lexical scope isolation. Unfreed allocations going out of scope without escaping to an outer variable trigger fatal compile-time memory leak errors at the closing brace.
@@ -91,12 +93,26 @@ g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
 gcc -specs=build/specs/safe_c.specs main.c -o app.exe
 ```
 
-### Disabling On Demand
-Safe-C static analysis can be bypassed for third-party libraries:
-```cmd
-gcc -DSAFE_C_DISABLE -c third_party.c -o third_party.o
-set SAFE_C_DISABLE=1
-```
+### Compiler & Plugin Control Flags
+When integrated via `specs`, individual translation units or builds can enable, disable, downgrade to warnings, or toggle specific checks:
+
+| Macro / Flag | Plugin Argument Equivalent | Effect |
+| :--- | :--- | :--- |
+| `-DSAFE_C_DISABLE` | `-fplugin-arg-safe_c-disable` | Disable plugin for this invocation |
+| `-DSAFE_C_ENABLE` | `-fplugin-arg-safe_c-enable` | Force-enable plugin (overrides global `SAFE_C_DISABLE` / `-DSAFE_C_DISABLE`) |
+| `-DSAFE_C_WARN_ONLY` | `-fplugin-arg-safe_c-mode=warn` | Emit GCC `warning:` diagnostics without halting compilation |
+| `-DSAFE_C_FATAL` | `-fplugin-arg-safe_c-mode=fatal` | Emit GCC `error:` diagnostics and halt compilation (default) |
+| `-DSAFE_C_NO_LEAKS` | `-fplugin-arg-safe_c-leaks=off` | Disable heap memory leak checks |
+| `-DSAFE_C_NO_DOUBLE_FREE` | `-fplugin-arg-safe_c-double-free=off` | Disable double-free checks |
+| `-DSAFE_C_NO_UAF` | `-fplugin-arg-safe_c-uaf=off` | Disable use-after-free checks |
+| `-DSAFE_C_NO_BOUNDS` | `-fplugin-arg-safe_c-bounds=off` | Disable static spatial bounds checks |
+| `-DSAFE_C_NO_NULL` | `-fplugin-arg-safe_c-null=off` | Disable null pointer dereference checks |
+| `-DSAFE_C_NO_UNINIT` | `-fplugin-arg-safe_c-uninit=off` | Disable uninitialized pointer checks |
+| `-DSAFE_C_NO_MISMATCH` | `-fplugin-arg-safe_c-mismatch=off` | Disable mismatched allocator/deallocator checks |
+| `-DSAFE_C_NO_DANGLING` | `-fplugin-arg-safe_c-dangling=off` | Disable dangling local-address return errors |
+| `-DSAFE_C_NO_ARITHMETIC` | `-fplugin-arg-safe_c-arithmetic=off` | Disable pointer-arithmetic base-retention checks |
+
+Environment overrides: `SAFE_C_DISABLE=1`, `SAFE_C_ENABLE=1`, `SAFE_C_MODE=warn|fatal|off`.
 
 ---
 

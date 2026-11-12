@@ -5,13 +5,12 @@
 Safe-C formats diagnostics to strictly mirror GNU GCC and Clang compiler output:
 
 ```
-tests/compile_fail/double_free.c:6:5: error: [Safe-C] Double free detected on pointer 'ptr'.
+tests/compile_fail/double_free.c:6:5: error: double free of 'ptr' [-Wsafec-double-free]
     6 |     free(ptr); // ERROR: Double free must abort compilation
-      |     ^~~~
-tests/compile_fail/double_free.c:5:5: note: Previous deallocation occurred here:
+      |     ^~~~~~~~~
+tests/compile_fail/double_free.c:5:5: note: previously deallocated here
     5 |     free(ptr);
-      |     ^~~~
-compilation terminated due to memory safety violations.
+      |     ^~~~~~~~~
 ```
 
 ---

@@ -262,9 +262,9 @@
         <span class="badge">Cross-Platform</span>
       </div>
       <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-        <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.0.0/Safe-C-1.0.0-win64.zip" class="badge" style="background: #2563eb; color: #fff; text-decoration: none; padding: 0.6rem 1.2rem; font-weight: 600; border-radius: 6px;">Download Windows (win64.zip)</a>
-        <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.0.0/Safe-C-1.0.0-Linux.tar.gz" class="badge" style="background: #059669; color: #fff; text-decoration: none; padding: 0.6rem 1.2rem; font-weight: 600; border-radius: 6px;">Download Linux (tar.gz)</a>
-        <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.0.0" class="badge" style="background: #374151; color: #fff; text-decoration: none; padding: 0.6rem 1.2rem; font-weight: 600; border-radius: 6px;">Release Notes v1.0.0</a>
+        <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.1.0/Safe-C-1.1.0-win64.zip" class="badge" style="background: #2563eb; color: #fff; text-decoration: none; padding: 0.6rem 1.2rem; font-weight: 600; border-radius: 6px;">Download Windows (win64.zip)</a>
+        <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.1.0/Safe-C-1.1.0-Linux.tar.gz" class="badge" style="background: #059669; color: #fff; text-decoration: none; padding: 0.6rem 1.2rem; font-weight: 600; border-radius: 6px;">Download Linux (tar.gz)</a>
+        <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.1.0" class="badge" style="background: #374151; color: #fff; text-decoration: none; padding: 0.6rem 1.2rem; font-weight: 600; border-radius: 6px;">Release Notes v1.1.0</a>
       </div>
     </div>
 
@@ -275,6 +275,15 @@
         or C++ <code>new</code>/<code>delete</code>. Rather than substituting the language with an artificial dialect
         or forced smart pointer wrappers, Safe-C preserves standard idioms while enforcing pointer lifetime invariants.
       </p>
+      <div class="callout">
+        <div class="callout-title">v1.1.0 Comprehensive CFG &amp; Spatial Safety</div>
+        <p>
+          v1.1.0 introduces Reverse-Post-Order (RPO) control-flow analysis with <code>GIMPLE_PHI</code> merging,
+          null-branch awareness, spatial out-of-bounds checks, null/uninitialized pointer dereference detection,
+          mismatched deallocator checks, dangling stack return enforcement, and full C++ STL/RAII &amp; placement-new support
+          with zero false positives.
+        </p>
+      </div>
       <div class="callout">
         <div class="callout-title">Architectural Mandate</div>
         <p>
@@ -418,7 +427,13 @@ gcc -specs=build/specs/safe_c.specs main.c -o app.exe</code></pre>
 
       <h3>4. Bypassing On Demand</h3>
       <pre><code># Bypass Safe-C when compiling legacy or vendor code
+# Disable or override per target
 gcc -DSAFE_C_DISABLE -c legacy.c -o legacy.o
+gcc -DSAFE_C_DISABLE -DSAFE_C_ENABLE -c strict_module.c -o strict_module.o
+
+# Downgrade errors to warnings or toggle individual checks
+gcc -DSAFE_C_WARN_ONLY -c legacy_port.c -o legacy_port.o
+gcc -DSAFE_C_NO_BOUNDS -DSAFE_C_NO_UNINIT -c custom_alloc.c -o custom_alloc.o
 set SAFE_C_DISABLE=1</code></pre>
     </section>
 
@@ -426,31 +441,22 @@ set SAFE_C_DISABLE=1</code></pre>
       <h2>6. Diagnostic Output &amp; GNU/GCC Error Highlighting</h2>
       <p>
         When an unsafe operation is detected, Safe-C emits authentic GNU/GCC-styled diagnostics to <code>stderr</code>
-        with gutter line numbers, source code snippets, caret token underlines, and ANSI syntax colorization.
-        Address scope resolution ensures <code>.\x.c</code>, <code>./x.c</code>, and <code>x.c</code> resolve to identical file identities,
-        and each line is emitted once per violation type:
+        following GCC diagnostic guidelines (lowercase messages, no trailing periods, <code>[-Wsafec-*]</code> category labels,
+        gutter line numbers, caret underlines, and ANSI syntax highlighting):
       </p>
-      <pre><code>tests/compile_fail/double_free.c:6:5: error: [Safe-C] Double free detected on pointer 'ptr'.
+      <pre><code>tests/compile_fail/double_free.c:6:5: error: double free of 'ptr' [-Wsafec-double-free]
     6 |     free(ptr); // ERROR: Double free must abort compilation
-      |     ^~~~
-tests/compile_fail/double_free.c:5:5: note: Previous deallocation occurred here:
+      |     ^~~~~~~~~
+tests/compile_fail/double_free.c:5:5: note: previously deallocated here
     5 |     free(ptr);
-      |     ^~~~
-compilation terminated due to memory safety violations.
+      |     ^~~~~~~~~
 
-tests/compile_fail/altered_pointer_free.c:5:9: error: [Safe-C] Cannot alter pointer 'buf' offset: no variable retains the original allocation base address.
-    5 |     buf += 4;   // Pointer address altered!
-      |         ^~
-tests/compile_fail/altered_pointer_free.c:4:24: note: Original allocation occurred here:
-    4 |     char* buf = (char*)malloc(32);
-      |                        ^~~~~~
-tests/compile_fail/altered_pointer_free.c:6:5: error: [Safe-C] Attempt to free altered/interior pointer 'buf'. Address was shifted by 4 bytes before deallocation.
+tests/compile_fail/altered_pointer_free.c:6:5: error: attempt to free interior pointer 'buf' at offset 4 bytes [-Wsafec-modified-base]
     6 |     free(buf);  // ERROR: Freeing interior pointer must abort compilation
-      |     ^~~~
-tests/compile_fail/altered_pointer_free.c:4:24: note: Original allocation base was created here:
+      |     ^~~~~~~~~
+tests/compile_fail/altered_pointer_free.c:4:24: note: original allocation base created here
     4 |     char* buf = (char*)malloc(32);
-      |                        ^~~~~~
-compilation terminated due to memory safety violations.</code></pre>
+      |                        ^~~~~~~~~~</code></pre>
     </section>
 
     <section id="self-compilation">
