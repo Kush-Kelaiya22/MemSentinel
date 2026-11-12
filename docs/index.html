@@ -415,7 +415,7 @@
     <div class="container header-inner">
       <a class="brand" href="#">
         <span>Safe-C</span>
-        <span class="version-pill">v1.1.0</span>
+        <span class="version-pill">v1.2.0</span>
       </a>
       <nav class="nav" aria-label="Primary navigation">
         <a href="#checks">Checks</a>
@@ -433,16 +433,16 @@
       <h1>Compile-Time Memory Safety for GCC and G++</h1>
       <p class="hero-lead">
         Safe-C plugs directly into GCC and G++ to check heap lifetimes, pointer arithmetic,
-        spatial bounds, deallocator matching, and null or uninitialized dereferences while compiling
-        standard C and C++ code.
+        spatial bounds, null dereferences, and STL iterator invalidation while compiling
+        standard C and C++ code—focusing on bugs that stock GCC does not catch on its own.
       </p>
       <div class="meta-line">
         C11/C17 &middot; C++20 &middot; Linux (GCC plugin + specs) &amp; Windows (MinGW-w64) &middot; AGPLv3
       </div>
       <div class="btn-row">
-        <a class="btn btn-primary" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.1.0/Safe-C-1.1.0-Linux.tar.gz">Download Linux (.tar.gz)</a>
-        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.1.0/Safe-C-1.1.0-win64.zip">Download Windows (.zip)</a>
-        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.1.0">Release Notes</a>
+        <a class="btn btn-primary" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.2.0/Safe-C-1.2.0-Linux.tar.gz">Download Linux (.tar.gz)</a>
+        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.2.0/Safe-C-1.2.0-win64.zip">Download Windows (.zip)</a>
+        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.2.0">Release Notes</a>
         <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C">Repository</a>
       </div>
     </div>
@@ -490,18 +490,6 @@
               <td><code>-DSAFE_C_NO_ARITHMETIC</code></td>
             </tr>
             <tr>
-              <td>Allocator mismatch</td>
-              <td><code>[-Wsafec-mismatched-dealloc]</code></td>
-              <td>Mixing <code>malloc</code>/<code>free</code>, <code>new</code>/<code>delete</code>, and <code>new[]</code>/<code>delete[]</code></td>
-              <td><code>-DSAFE_C_NO_MISMATCH</code></td>
-            </tr>
-            <tr>
-              <td>Non-heap free</td>
-              <td><code>[-Wsafec-invalid-free]</code></td>
-              <td>Passing a stack or non-heap address to a heap deallocator</td>
-              <td><code>-DSAFE_C_NO_MISMATCH</code></td>
-            </tr>
-            <tr>
               <td>Out-of-bounds access</td>
               <td><code>[-Wsafec-bounds]</code></td>
               <td>Constant negative or out-of-range indexing/dereference beyond known allocation size</td>
@@ -514,16 +502,10 @@
               <td><code>-DSAFE_C_NO_NULL</code></td>
             </tr>
             <tr>
-              <td>Uninitialized dereference</td>
-              <td><code>[-Wsafec-uninitialized]</code></td>
-              <td>Dereferencing a local pointer before any assignment</td>
-              <td><code>-DSAFE_C_NO_UNINIT</code></td>
-            </tr>
-            <tr>
-              <td>Dangling stack return</td>
-              <td><code>[-Wsafec-return-local-addr]</code></td>
-              <td>Returning the address of a function-local stack variable</td>
-              <td><code>-DSAFE_C_NO_DANGLING</code></td>
+              <td>Iterator &amp; data handle invalidation</td>
+              <td><code>[-Wsafec-iterator-invalidation]</code></td>
+              <td>Mutating an STL container (e.g. <code>push_back</code>, <code>insert</code>, <code>erase</code>) while iterating or using an old <code>.data()</code> / <code>.c_str()</code> handle</td>
+              <td><code>-DSAFE_C_NO_ITERATOR</code></td>
             </tr>
           </tbody>
         </table>
@@ -536,7 +518,7 @@
           <ul>
             <li><strong>Returned allocations:</strong> allocating in a helper function and returning the pointer to the caller.</li>
             <li><strong>Ownership transfer:</strong> assigning a local allocation into an outer pointer, parameter slot, or struct field.</li>
-            <li><strong>Containers &amp; RAII:</strong> <code>std::vector</code> growth/reallocation, C++ destructors, and placement <code>new</code>.</li>
+            <li><strong>Safe STL &amp; RAII:</strong> <code>it = v.erase(it)</code> refresh, mutating immediately before <code>break</code>/<code>return</code>, indexed loops, and placement <code>new</code>.</li>
             <li><strong>Pointer arithmetic with backup:</strong> advancing a cursor or shifting a base pointer while another variable keeps offset 0.</li>
             <li><strong>Safe no-ops &amp; guarded branches:</strong> <code>free(NULL)</code>, <code>delete nullptr</code>, <code>realloc()</code> re-assignment, and dereferences guarded by <code>if (p)</code>.</li>
           </ul>
@@ -545,10 +527,9 @@
           <div class="card-title"><span class="dot dot-err"></span>Rejected Idioms (Halts Compilation)</div>
           <ul>
             <li><strong>Lost base address:</strong> modifying the only variable holding an allocation base (<code>p += 4; free(p);</code>).</li>
-            <li><strong>Branch leaks / partial frees:</strong> leaking on an early return path or freeing without clearing remaining aliases.</li>
-            <li><strong>Cross-family teardown:</strong> calling <code>free()</code> on <code>new</code>, or <code>delete</code> instead of <code>delete[]</code>.</li>
-            <li><strong>Known OOB / null / uninit reads &amp; writes:</strong> constant index overflow, unguarded null paths, or uninitialized pointer use.</li>
-            <li><strong>Escaping stack pointers:</strong> returning <code>&amp;local</code> directly or through an alias.</li>
+            <li><strong>Branch &amp; overwrite leaks:</strong> leaking on an early return path, overwriting an unfreed pointer, or double-free/double-delete.</li>
+            <li><strong>Iterator / buffer invalidation:</strong> calling <code>push_back()</code> inside a range-<code>for</code> loop or dereferencing stale <code>.data()</code> pointers after container growth.</li>
+            <li><strong>Known OOB / negative / null reads &amp; writes:</strong> negative indexing (<code>p[-1]</code>), constant index overflow, and unguarded null paths.</li>
           </ul>
         </div>
       </div>
@@ -729,24 +710,14 @@ python tools/integrate_toolchain.py --uninstall</code></pre>
               <td>Disable null dereference checks.</td>
             </tr>
             <tr>
-              <td><code>-DSAFE_C_NO_UNINIT</code></td>
-              <td><code>-fplugin-arg-safe_c-uninit=off</code></td>
-              <td>Disable uninitialized pointer checks.</td>
-            </tr>
-            <tr>
-              <td><code>-DSAFE_C_NO_MISMATCH</code></td>
-              <td><code>-fplugin-arg-safe_c-mismatch=off</code></td>
-              <td>Disable allocator/deallocator mismatch and non-heap free checks.</td>
-            </tr>
-            <tr>
-              <td><code>-DSAFE_C_NO_DANGLING</code></td>
-              <td><code>-fplugin-arg-safe_c-dangling=off</code></td>
-              <td>Disable local stack-address return checks.</td>
-            </tr>
-            <tr>
               <td><code>-DSAFE_C_NO_ARITHMETIC</code></td>
               <td><code>-fplugin-arg-safe_c-arithmetic=off</code></td>
               <td>Disable modified-base pointer arithmetic checks.</td>
+            </tr>
+            <tr>
+              <td><code>-DSAFE_C_NO_ITERATOR</code></td>
+              <td><code>-fplugin-arg-safe_c-iterator=off</code></td>
+              <td>Disable C++ STL iterator and <code>.data()</code>/<code>.c_str()</code> invalidation checks.</td>
             </tr>
           </tbody>
         </table>
@@ -782,7 +753,7 @@ tests/compile_fail/altered_pointer_free.c:4:24: note: original allocation base c
         <span>Safe-C &middot; Licensed under AGPLv3</span>
         <nav class="footer-nav" aria-label="Footer navigation">
           <a href="https://github.com/Kush-Kelaiya22/Safe-C">Repository</a>
-          <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.1.0">Releases</a>
+          <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.2.0">Releases</a>
           <a href="https://github.com/Kush-Kelaiya22/Safe-C/issues">Issues</a>
           <a href="https://github.com/Kush-Kelaiya22/Safe-C/discussions">Discussions</a>
           <a href="https://github.com/Kush-Kelaiya22/Safe-C/tree/main/wiki">Docs / Wiki</a>

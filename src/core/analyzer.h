@@ -30,10 +30,8 @@ struct CheckOptions {
     bool uaf{true};
     bool bounds{true};
     bool null_deref{true};
-    bool uninit{true};
-    bool dangling{true};
-    bool mismatch{true};
     bool arithmetic{true};
+    bool iterator{true};
 };
 
 class Analyzer {

@@ -40,11 +40,18 @@ static bool cst_to_size(tree t, size_t& out) {
 }
 
 static bool cst_to_shwi(tree t, int64_t& out) {
-    if (!t || TREE_CODE(t) != INTEGER_CST || !tree_fits_shwi_p(t)) {
+    if (!t || TREE_CODE(t) != INTEGER_CST) {
         return false;
     }
-    out = static_cast<int64_t>(tree_to_shwi(t));
-    return true;
+    if (tree_fits_shwi_p(t)) {
+        out = static_cast<int64_t>(tree_to_shwi(t));
+        return true;
+    }
+    if (tree_fits_uhwi_p(t)) {
+        out = static_cast<int64_t>(tree_to_uhwi(t));
+        return true;
+    }
+    return false;
 }
 
 static bool is_dealloc_fn(const char* fn_name, const char* asm_name, safe_c::AllocKind& out_kind) {
@@ -252,26 +259,6 @@ static void report_dealloc_error(
             }
         }
         break;
-    case safe_c::ViolationType::MismatchedDealloc:
-        if (!cfg.check_mismatch) return;
-        SAFEC_DIAG(loc, "mismatched deallocation on pointer %qs [-Wsafec-mismatched-dealloc]", name_or_ptr);
-        if (cell) {
-            auto orig = cell_alloc_loc.find(cell->cell_id);
-            if (orig != cell_alloc_loc.end() && orig->second.loc != UNKNOWN_LOCATION) {
-                inform(orig->second.loc, "allocated here with incompatible allocator");
-            }
-        }
-        break;
-    case safe_c::ViolationType::UnallocatedFree:
-        if (!cfg.check_mismatch) return;
-        SAFEC_DIAG(loc, "deallocation of non-heap pointer %qs [-Wsafec-invalid-free]", name_or_ptr);
-        if (cell) {
-            auto orig = cell_alloc_loc.find(cell->cell_id);
-            if (orig != cell_alloc_loc.end() && orig->second.loc != UNKNOWN_LOCATION) {
-                inform(orig->second.loc, "declared here");
-            }
-        }
-        break;
     default:
         break;
     }
@@ -315,19 +302,116 @@ static void report_access_error(
         if (!cfg.check_null) return;
         SAFEC_DIAG(loc, "null pointer dereference of %qs [-Wsafec-null-deref]", name_or_ptr);
         break;
-    case safe_c::ViolationType::UninitializedPointer:
-        if (!cfg.check_uninit) return;
-        SAFEC_DIAG(loc, "%qs may be used uninitialized [-Wsafec-uninitialized]", name_or_ptr);
-        if (cell) {
-            auto a_it = cell_alloc_loc.find(cell->cell_id);
-            if (a_it != cell_alloc_loc.end() && a_it->second.loc != UNKNOWN_LOCATION) {
-                inform(a_it->second.loc, "%qs was declared here", name_or_ptr);
-            }
-        }
-        break;
     default:
         break;
     }
+}
+
+struct IterEntry {
+    std::string container_key;
+    std::string container_name;
+    location_t start_loc{UNKNOWN_LOCATION};
+    location_t mutated_loc{UNKNOWN_LOCATION};
+    bool invalidated{false};
+};
+
+using IterMap = std::unordered_map<std::string, IterEntry>;
+
+static const char* decl_ctx_type_name(tree fndecl) {
+    tree ctx = DECL_CONTEXT(fndecl);
+    if (ctx && TYPE_P(ctx)) {
+        tree id = TYPE_IDENTIFIER(ctx);
+        if (id) return IDENTIFIER_POINTER(id);
+    }
+    return nullptr;
+}
+
+static bool has_substr(const char* hay, const char* needle) {
+    return hay && needle && strstr(hay, needle) != nullptr;
+}
+
+static bool is_stl_container_call(tree fndecl, const char* asm_name) {
+    const char* ctx = decl_ctx_type_name(fndecl);
+    if (has_substr(ctx, "vector") || has_substr(ctx, "deque") ||
+        has_substr(ctx, "basic_string") || has_substr(ctx, "unordered_") ||
+        has_substr(ctx, "map") || has_substr(ctx, "set") || has_substr(ctx, "list")) {
+        return true;
+    }
+    return has_substr(asm_name, "St6vector") || has_substr(asm_name, "St5deque") ||
+           has_substr(asm_name, "basic_string") || has_substr(asm_name, "unordered_");
+}
+
+static bool is_iter_begin_method(const char* fn_name) {
+    if (!fn_name) return false;
+    return strcmp(fn_name, "begin") == 0 || strcmp(fn_name, "cbegin") == 0 ||
+           strcmp(fn_name, "rbegin") == 0 || strcmp(fn_name, "crbegin") == 0 ||
+           strcmp(fn_name, "find") == 0 || strcmp(fn_name, "lower_bound") == 0 ||
+           strcmp(fn_name, "upper_bound") == 0 ||
+           strcmp(fn_name, "data") == 0 || strcmp(fn_name, "c_str") == 0;
+}
+
+static bool is_container_mutator(const char* fn_name) {
+    if (!fn_name) return false;
+    return strcmp(fn_name, "push_back") == 0 || strcmp(fn_name, "emplace_back") == 0 ||
+           strcmp(fn_name, "push_front") == 0 || strcmp(fn_name, "emplace_front") == 0 ||
+           strcmp(fn_name, "insert") == 0 || strcmp(fn_name, "emplace") == 0 ||
+           strcmp(fn_name, "erase") == 0 || strcmp(fn_name, "clear") == 0 ||
+           strcmp(fn_name, "resize") == 0 || strcmp(fn_name, "reserve") == 0 ||
+           strcmp(fn_name, "assign") == 0 || strcmp(fn_name, "pop_back") == 0 ||
+           strcmp(fn_name, "pop_front") == 0 ||
+           strcmp(fn_name, "shrink_to_fit") == 0 || strcmp(fn_name, "rehash") == 0;
+}
+
+static void report_iter_invalidation(
+    IterMap& iters,
+    std::unordered_set<std::string>& reported_iters,
+    const std::string& ikey,
+    location_t fallback_loc
+) {
+    if (ikey.empty()) return;
+    auto it = iters.find(ikey);
+    if (it != iters.end() && it->second.invalidated && reported_iters.insert(ikey).second) {
+        location_t diag_loc = (it->second.mutated_loc != UNKNOWN_LOCATION) ? it->second.mutated_loc : fallback_loc;
+        SAFEC_DIAG(diag_loc,
+                   "container %qs mutated while iterating with invalidated iterator [-Wsafec-iterator-invalidation]",
+                   it->second.container_name.empty() ? "container" : it->second.container_name.c_str());
+        if (it->second.start_loc != UNKNOWN_LOCATION) {
+            inform(it->second.start_loc, "iteration started here");
+        }
+    }
+}
+
+static bool is_destructor_call(const char* fn_name, const char* asm_name) {
+    if (fn_name && fn_name[0] == '~') return true;
+    return has_substr(asm_name, "D0Ev") || has_substr(asm_name, "D1Ev") || has_substr(asm_name, "D2Ev");
+}
+
+static std::string canonical_obj_key(tree t, std::string& out_name) {
+    for (int depth = 0; t && depth < 8; ++depth) {
+        if (TREE_CODE(t) == ADDR_EXPR) {
+            t = TREE_OPERAND(t, 0);
+            continue;
+        }
+        if (TREE_CODE(t) == SSA_NAME) {
+            gimple *def = SSA_NAME_DEF_STMT(t);
+            if (def && is_gimple_assign(def)) {
+                enum tree_code rc = gimple_assign_rhs_code(def);
+                if (rc == ADDR_EXPR || rc == SSA_NAME || rc == NOP_EXPR || rc == CONVERT_EXPR) {
+                    t = gimple_assign_rhs1(def);
+                    continue;
+                }
+            }
+            const char* n = ssa_var_name(t);
+            if (n && *n) out_name = n;
+            return ssa_sym(t);
+        }
+        if (DECL_P(t)) {
+            if (DECL_NAME(t)) out_name = IDENTIFIER_POINTER(DECL_NAME(t));
+            return "decl_" + std::to_string(DECL_UID(t));
+        }
+        break;
+    }
+    return {};
 }
 
 const pass_data safe_c_pass_data = {
@@ -375,11 +459,13 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
     if (!fun || !fun->cfg) return 0;
 
     std::unordered_map<int, safe_c::core::StateTable> bb_out_states;
+    std::unordered_map<int, IterMap> bb_out_iters;
     std::unordered_map<uint64_t, LocInfo> cell_alloc_loc;
     std::unordered_map<uint64_t, LocInfo> cell_free_loc;
     std::unordered_map<std::string, LocInfo> sym_alloc_loc;
     std::unordered_map<std::string, std::string> realloc_src;
     std::unordered_set<uint64_t> reported_leaks;
+    std::unordered_set<std::string> reported_iters;
 
     auto rpo_blocks = get_rpo_blocks(fun);
 
@@ -387,6 +473,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
         if (!bb || bb->index == EXIT_BLOCK) continue;
 
         safe_c::core::StateTable state;
+        IterMap iters;
         bool has_pred_state = false;
         edge e;
         edge_iterator ei;
@@ -424,9 +511,25 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
 
             if (!has_pred_state) {
                 state = std::move(incoming);
+                auto iter_it = bb_out_iters.find(e->src->index);
+                if (iter_it != bb_out_iters.end()) {
+                    iters = iter_it->second;
+                }
                 has_pred_state = true;
             } else {
                 state.merge_from(incoming);
+                auto iter_it = bb_out_iters.find(e->src->index);
+                if (iter_it != bb_out_iters.end()) {
+                    for (const auto& [ik, iv] : iter_it->second) {
+                        auto cur = iters.find(ik);
+                        if (cur == iters.end()) {
+                            iters.emplace(ik, iv);
+                        } else if (iv.invalidated && !cur->second.invalidated) {
+                            cur->second.invalidated = true;
+                            cur->second.mutated_loc = iv.mutated_loc;
+                        }
+                    }
+                }
             }
         }
 
@@ -473,27 +576,18 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
             }
         }
 
-        auto ensure_default_def_tracked = [&](tree ptr_ssa) {
-            if (!ptr_ssa || TREE_CODE(ptr_ssa) != SSA_NAME) return;
-            if (!SSA_NAME_IS_DEFAULT_DEF(ptr_ssa)) return;
-            tree var = SSA_NAME_VAR(ptr_ssa);
-            if (!var || TREE_CODE(var) != VAR_DECL || is_global_var(var)) return;
-
-            std::string sym = ssa_sym(ptr_ssa);
-            if (!state.has_symbol(sym)) {
-                auto cell = state.register_special(sym, safe_c::SourceLocation{}, safe_c::AllocKind::Uninitialized);
-                const char* vname = DECL_NAME(var) ? IDENTIFIER_POINTER(DECL_NAME(var)) : "";
-                location_t decl_loc = DECL_SOURCE_LOCATION(var);
-                sym_alloc_loc[sym] = {decl_loc, vname};
-                if (cell) {
-                    cell_alloc_loc[cell->cell_id] = {decl_loc, vname};
-                }
-            }
-        };
-
         for (gimple_stmt_iterator gsi = gsi_start_bb(bb); !gsi_end_p(gsi); gsi_next(&gsi)) {
             gimple *stmt = gsi_stmt(gsi);
-            if (gimple_clobber_p(stmt)) continue;
+            if (gimple_clobber_p(stmt)) {
+                if (is_gimple_assign(stmt)) {
+                    std::string tmp_name;
+                    std::string clobber_key = canonical_obj_key(gimple_assign_lhs(stmt), tmp_name);
+                    if (!clobber_key.empty()) {
+                        iters.erase(clobber_key);
+                    }
+                }
+                continue;
+            }
 
             location_t loc = gimple_location(stmt);
 
@@ -503,6 +597,51 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                 const char *fn_name = DECL_NAME(fndecl) ? IDENTIFIER_POINTER(DECL_NAME(fndecl)) : nullptr;
                 const char *asm_name = DECL_ASSEMBLER_NAME(fndecl) ? IDENTIFIER_POINTER(DECL_ASSEMBLER_NAME(fndecl)) : nullptr;
 
+                if (g_config.check_iterator && !is_destructor_call(fn_name, asm_name)) {
+                    unsigned nargs = gimple_call_num_args(stmt);
+                    for (unsigned ai = 0; ai < nargs; ++ai) {
+                        std::string dummy;
+                        report_iter_invalidation(iters, reported_iters,
+                                                 canonical_obj_key(gimple_call_arg(stmt, ai), dummy), loc);
+                    }
+
+                    if (is_stl_container_call(fndecl, asm_name) && nargs >= 1) {
+                        std::string cname;
+                        std::string ckey = canonical_obj_key(gimple_call_arg(stmt, 0), cname);
+                        if (!ckey.empty()) {
+                            if (is_iter_begin_method(fn_name)) {
+                                tree lhs = gimple_call_lhs(stmt);
+                                if (lhs) {
+                                    std::string iname;
+                                    std::string ikey = canonical_obj_key(lhs, iname);
+                                    if (!ikey.empty()) {
+                                        iters[ikey] = {ckey, cname, loc, UNKNOWN_LOCATION, false};
+                                    }
+                                }
+                            } else if (is_container_mutator(fn_name)) {
+                                tree lhs = gimple_call_lhs(stmt);
+                                std::string refreshed_key;
+                                if (lhs && fn_name &&
+                                    (strcmp(fn_name, "erase") == 0 || strcmp(fn_name, "insert") == 0 ||
+                                     strcmp(fn_name, "emplace") == 0)) {
+                                    std::string iname;
+                                    refreshed_key = canonical_obj_key(lhs, iname);
+                                }
+                                for (auto& [ikey, entry] : iters) {
+                                    if (entry.container_key == ckey) {
+                                        if (ikey == refreshed_key) {
+                                            entry.invalidated = false;
+                                        } else {
+                                            entry.invalidated = true;
+                                            entry.mutated_loc = loc;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 safe_c::AllocKind dealloc_kind = safe_c::AllocKind::Unknown;
                 safe_c::AllocKind alloc_kind = safe_c::AllocKind::Unknown;
 
@@ -510,7 +649,6 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                     if (gimple_call_num_args(stmt) >= 2) {
                         tree old_arg = gimple_call_arg(stmt, 0);
                         if (old_arg && TREE_CODE(old_arg) == SSA_NAME) {
-                            ensure_default_def_tracked(old_arg);
                             std::string old_sym = ssa_sym(old_arg);
                             if (state.has_symbol(old_sym)) {
                                 std::shared_ptr<core::AllocationCell> cell;
@@ -548,7 +686,6 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                             continue;
                         }
                         if (arg && TREE_CODE(arg) == SSA_NAME) {
-                            ensure_default_def_tracked(arg);
                             std::string sym_name = ssa_sym(arg);
                             if (!state.has_symbol(sym_name)) {
                                 continue;
@@ -607,7 +744,6 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                     tree dst = gimple_call_arg(stmt, ptr_arg_idx);
                     tree len = gimple_call_arg(stmt, sz_arg_idx);
                     if (dst && TREE_CODE(dst) == SSA_NAME) {
-                        ensure_default_def_tracked(dst);
                         std::string dst_sym = ssa_sym(dst);
                         size_t write_sz = 0;
                         cst_to_size(len, write_sz);
@@ -654,12 +790,20 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                         if (b_it != sym_alloc_loc.end()) {
                             sym_alloc_loc[lhs_sym] = b_it->second;
                         }
+                        auto iter_it = iters.find(base_sym);
+                        if (iter_it != iters.end()) {
+                            iters[lhs_sym] = iter_it->second;
+                        }
                     }
                 } else if ((code == SSA_NAME || code == NOP_EXPR || code == CONVERT_EXPR) &&
                            lhs && rhs1 && TREE_CODE(lhs) == SSA_NAME && TREE_CODE(rhs1) == SSA_NAME) {
                     std::string rhs_sym = ssa_sym(rhs1);
                     std::string lhs_sym = ssa_sym(lhs);
                     state.register_alias(lhs_sym, rhs_sym, 0);
+                    auto iter_it = iters.find(rhs_sym);
+                    if (iter_it != iters.end()) {
+                        iters[lhs_sym] = iter_it->second;
+                    }
 
                     const char* vname = ssa_var_name(lhs);
                     auto r_it = sym_alloc_loc.find(rhs_sym);
@@ -699,33 +843,8 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
             if (gimple_code(stmt) == GIMPLE_RETURN) {
                 greturn *ret = as_a<greturn*>(stmt);
                 tree val = gimple_return_retval(ret);
-                if (val && TREE_CODE(val) == ADDR_EXPR) {
-                    tree target = TREE_OPERAND(val, 0);
-                    if (g_config.check_dangling && target && TREE_CODE(target) == VAR_DECL && !is_global_var(target)) {
-                        const char* vname = DECL_NAME(target) ? IDENTIFIER_POINTER(DECL_NAME(target)) : nullptr;
-                        SAFEC_DIAG(loc, "function returns address of local variable %qs [-Wsafec-return-local-addr]",
-                                   vname ? vname : "local");
-                        location_t decl_loc = DECL_SOURCE_LOCATION(target);
-                        if (decl_loc != UNKNOWN_LOCATION) {
-                            inform(decl_loc, "declared here");
-                        }
-                    }
-                } else if (val && TREE_CODE(val) == SSA_NAME) {
-                    std::string ret_sym = ssa_sym(val);
-                    const auto* binding = state.get_binding(ret_sym);
-                    if (binding && binding->cell() && binding->cell()->kind == safe_c::AllocKind::Stack) {
-                        if (g_config.check_dangling) {
-                            std::string dname = resolve_display_name(val, ret_sym, binding->cell(), sym_alloc_loc, cell_alloc_loc);
-                            SAFEC_DIAG(loc, "function returns address of local variable %qs [-Wsafec-return-local-addr]",
-                                       dname.empty() ? "local" : dname.c_str());
-                            auto a_it = cell_alloc_loc.find(binding->cell()->cell_id);
-                            if (a_it != cell_alloc_loc.end() && a_it->second.loc != UNKNOWN_LOCATION) {
-                                inform(a_it->second.loc, "declared here");
-                            }
-                        }
-                    } else {
-                        state.mark_escaped(ret_sym);
-                    }
+                if (val && TREE_CODE(val) == SSA_NAME) {
+                    state.mark_escaped(ssa_sym(val));
                 }
             }
 
@@ -741,8 +860,11 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
             }
 
             if (deref_ptr && TREE_CODE(deref_ptr) == SSA_NAME) {
-                ensure_default_def_tracked(deref_ptr);
                 std::string sym_name = ssa_sym(deref_ptr);
+                if (g_config.check_iterator) {
+                    std::string dummy;
+                    report_iter_invalidation(iters, reported_iters, canonical_obj_key(deref_ptr, dummy), loc);
+                }
                 std::shared_ptr<core::AllocationCell> cell;
                 auto err = state.validate_access(sym_name, cell, mem_off, access_sz);
                 if (err.has_value()) {
@@ -755,6 +877,7 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
         }
 
         bb_out_states[bb->index] = std::move(state);
+        bb_out_iters[bb->index] = std::move(iters);
     }
 
     if (g_config.check_leaks) {

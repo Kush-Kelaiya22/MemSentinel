@@ -349,7 +349,7 @@ void test_runtime_guardrails() {
 void test_v1_1_edge_cases() {
     using namespace safe_c;
     using namespace safe_c::core;
-    std::cout << "[Test] v1.1.0 comprehensive edge cases (Core Analyzer / Windows Addon)...\n";
+    std::cout << "[Test] Edge cases, STL iterator invalidation & OOB checks...\n";
     Analyzer analyzer(Mode::FatalError);
 
     auto check = [](bool cond, const char* msg) {
@@ -373,21 +373,24 @@ void test_v1_1_edge_cases() {
         check_pass("tests/compile_pass/pointer_passing.c");
         check_pass("tests/compile_pass/scope_changing.c");
         check_pass("tests/compile_pass/valid_vector_mutation.cpp");
+        check_pass("tests/compile_pass/valid_stl_patterns.cpp");
     }
 
-    // 2. Invalid: dangling stack return, OOB access, null deref, uninit deref, mismatched dealloc
+    // 2. Invalid: OOB access, negative OOB, null deref, double delete, iterator/data invalidation
     auto check_fail = [&](const char* rel_path, ViolationType expected) {
         Analyzer fail_analyzer(Mode::FatalError);
         bool ok = fail_analyzer.analyze_file((fs::path(TEST_SOURCE_DIR) / rel_path).string());
         check(!ok && !fail_analyzer.diagnostics().empty() && fail_analyzer.diagnostics()[0].type == expected, rel_path);
     };
-    check_fail("tests/compile_fail/dangling_stack_return.c", ViolationType::DanglingStackReturn);
     check_fail("tests/compile_fail/out_of_bounds.c", ViolationType::OutOfBoundsAccess);
+    check_fail("tests/compile_fail/negative_oob.c", ViolationType::OutOfBoundsAccess);
     check_fail("tests/compile_fail/null_deref.c", ViolationType::NullPointerDeref);
-    check_fail("tests/compile_fail/uninit_deref.c", ViolationType::UninitializedPointer);
-    check_fail("tests/compile_fail/mismatched_dealloc.cpp", ViolationType::MismatchedDealloc);
+    check_fail("tests/compile_fail/double_delete.cpp", ViolationType::DoubleFree);
+    check_fail("tests/compile_fail/modify_vector.cpp", ViolationType::IteratorInvalidation);
+    check_fail("tests/compile_fail/container_data_dangling.cpp", ViolationType::IteratorInvalidation);
+    check_fail("tests/compile_fail/iterator_erase_use.cpp", ViolationType::IteratorInvalidation);
 
-    std::cout << "  ✓ All v1.1.0 edge cases verified in Core Analyzer.\n";
+    std::cout << "  ✓ All edge cases and STL invalidation checks verified in Core Analyzer.\n";
 }
 
 int main() {

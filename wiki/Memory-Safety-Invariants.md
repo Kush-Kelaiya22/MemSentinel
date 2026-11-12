@@ -1,20 +1,18 @@
-# Memory Safety Invariants (v1.1.0)
+# Memory Safety Invariants (v1.2.0)
 
-Safe-C enforces compile-time memory safety across both C and C++ while eliminating false positives on valid, idiomatic pointer patterns.
+Safe-C enforces compile-time memory safety across both C and C++ while eliminating false positives on valid, idiomatic pointer patterns. Checks already built into stock GCC/G++ (`-Wreturn-local-addr`, `-Wfree-nonheap-object`, `-Wuninitialized`, `-Wmismatched-new-delete`) are left to GCC directly.
 
 ## Violations Caught at Compile Time
 
 | Violation | Description | Diagnostic |
 |---|---|---|
-| **Memory Leak** | Heap allocation (`malloc`, `calloc`, `aligned_alloc`, `realloc`, `new`, `new[]`) that does not escape and is not freed before function/scope exit. | `leak of 'p' ... [-Wsafec-leak]` |
+| **Memory Leak** | Heap allocation (`malloc`, `calloc`, `aligned_alloc`, `realloc`, `new`, `new[]`) that does not escape and is not freed or is overwritten before free/exit. | `leak of 'p' ... [-Wsafec-leak]` |
 | **Double Free** | Calling `free`, `delete`, `delete[]`, or `realloc` on an already freed pointer. | `double free of 'p' [-Wsafec-double-free]` |
 | **Use-After-Free** | Dereferencing (`*p`, `p->f`, `p[i]`, `memcpy`/`memset`) a freed pointer. | `use-after-free on pointer 'p' [-Wsafec-use-after-free]` |
 | **Modified Base Free** | Freeing an interior/shifted pointer whose base address was lost. | `attempt to free interior pointer 'p' ... [-Wsafec-modified-base]` |
-| **Mismatched Deallocation** | Mixing allocators and deallocators (e.g., `new[]` with `delete`, `malloc` with `delete`). | `mismatched deallocation on pointer 'p' [-Wsafec-mismatched-dealloc]` |
-| **Out-of-Bounds Access** | Static spatial overflow/underflow on known-size allocations (`p[idx]`, `memcpy`, `memset`). | `out-of-bounds memory access on 'p' ... [-Wsafec-bounds]` |
+| **Out-of-Bounds Access** | Static spatial overflow or negative indexing underflow (`p[-1]`, `p[idx]`, `memcpy`, `memset`). | `out-of-bounds memory access on 'p' ... [-Wsafec-bounds]` |
 | **Null Pointer Dereference** | Dereferencing a pointer known to be `NULL` / `nullptr`. | `null pointer dereference of 'p' [-Wsafec-null-deref]` |
-| **Uninitialized Pointer** | Dereferencing a local pointer before it is initialized. | `'p' may be used uninitialized [-Wsafec-uninitialized]` |
-| **Dangling Stack Return** | Returning `&local_var` from a function (`-Werror=return-local-addr` + GIMPLE `ADDR_EXPR` check). | `function returns address of local variable 'x' [-Wsafec-return-local-addr]` |
+| **Iterator & Data Handle Invalidation** | Mutating an STL container (`push_back`, `insert`, `erase`, `clear`, `resize`, etc.) while iterating (`for (x : v)`, active `begin()`/`find()` iterator) or before reusing `.data()` / `.c_str()`. | `container 'v' mutated while iterating with invalidated iterator [-Wsafec-iterator-invalidation]` |
 
 ## Valid Patterns Supported (Zero False Positives)
 
