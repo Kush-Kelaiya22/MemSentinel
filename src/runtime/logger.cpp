@@ -21,8 +21,9 @@ std::string get_current_iso_timestamp() {
 } // anonymous namespace
 
 Logger& Logger::instance() {
-    static Logger inst;
-    return inst;
+    alignas(Logger) static unsigned char storage[sizeof(Logger)];
+    static Logger* inst = new (storage) Logger();
+    return *inst;
 }
 
 Logger::Logger() {
