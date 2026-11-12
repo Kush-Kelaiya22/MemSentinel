@@ -161,21 +161,23 @@ bool StateTable::has_base_variable(const std::shared_ptr<AllocationCell>& cell, 
 bool StateTable::can_alter_offset(const std::string& symbol, int64_t byte_delta) const {
     auto it = bindings_.find(symbol);
     if (it == bindings_.end() || !it->second || !it->second->cell()) {
-        return true; // Not an actively tracked heap cell
-    }
-    const auto& binding = it->second;
-    int64_t target_offset = binding->offset_bytes() + byte_delta;
-    if (target_offset == 0) {
-        // Restoring to base address is always permitted
         return true;
     }
-    // Non-zero offset is permitted as long as there is a variable containing the original base address
-    return has_base_variable(binding->cell(), symbol);
+    const auto& cell = it->second->cell();
+    if (!is_heap_kind(cell->kind) || cell->state != Typestate::Allocated) {
+        return true;
+    }
+    int64_t target_offset = it->second->offset_bytes() + byte_delta;
+    if (target_offset == 0) {
+        return true;
+    }
+    return has_base_variable(cell, symbol);
 }
 
 void StateTable::apply_pointer_arithmetic(const std::string& symbol, int64_t byte_delta) {
     auto it = bindings_.find(symbol);
-    if (it != bindings_.end() && it->second) {
+    if (it != bindings_.end() && it->second && it->second->cell() &&
+        is_heap_kind(it->second->cell()->kind)) {
         it->second->add_offset(byte_delta);
     }
 }

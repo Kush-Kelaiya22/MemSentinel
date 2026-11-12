@@ -7,6 +7,7 @@
 #include <cstring>
 #include <algorithm>
 #include <charconv>
+#include <unordered_set>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -296,20 +297,8 @@ std::string highlight_source_line(
 ) {
     if (!use_color) return std::string(line);
 
-    // If whole-line syntax highlighting is disabled, only highlight target token if requested
     if (!enable_highlight) {
-        if (target_col == 0 || target_len == 0 || target_col > line.size()) {
-            return std::string(line);
-        }
-        size_t start = target_col - 1;
-        size_t len = std::min<size_t>(target_len, line.size() - start);
-        std::string res;
-        res += line.substr(0, start);
-        res += (is_error ? colors.error : colors.note);
-        res += line.substr(start, len);
-        res += colors.reset;
-        res += line.substr(start + len);
-        return res;
+        return std::string(line);
     }
 
     static const std::unordered_set<std::string_view> types = {
@@ -535,6 +524,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
     // Track lexical scope where each variable was declared so inner-block assignments
     // to outer variables preserve the outer variable's lifetime.
     std::unordered_map<std::string, int> declared_scopes;
+    std::unordered_set<std::string> known_pointers;
     auto resolve_var_scope = [&](const std::string& sym) -> int {
         auto it = declared_scopes.find(sym);
         return (it != declared_scopes.end()) ? it->second : state_.current_scope();
@@ -630,6 +620,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
             if (state_.current_scope() == 0) {
                 state_.clear();
                 declared_scopes.clear();
+                known_pointers.clear();
             }
             continue;
         }
@@ -649,9 +640,11 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 if (declared_scopes.find(var_name) == declared_scopes.end()) {
                     declared_scopes[var_name] = state_.current_scope();
                 }
-                // Uninitialized pointer declaration: `int* p;`
-                if (is_ptr_decl && j + 1 < num_tokens && tokens[j + 1].text == ";") {
-                    state_.register_special(var_name, tok.loc, AllocKind::Uninitialized, state_.current_scope());
+                if (is_ptr_decl) {
+                    known_pointers.insert(var_name);
+                    if (j + 1 < num_tokens && tokens[j + 1].text == ";") {
+                        state_.register_special(var_name, tok.loc, AllocKind::Uninitialized, state_.current_scope());
+                    }
                 }
             }
         }
@@ -698,6 +691,7 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 }
                 state_.clear();
                 declared_scopes.clear();
+                known_pointers.clear();
             }
             continue;
         }
@@ -776,7 +770,10 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
         if (tok.text == "=" && i > 0 && i + 1 < num_tokens) {
             std::string lhs = tokens[i - 1].text;
             std::string rhs = tokens[i + 1].text;
-            if (rhs == "NULL" || rhs == "nullptr" || (rhs == "0" && i + 2 < num_tokens && tokens[i + 2].text == ";")) {
+            if (rhs == "NULL" || rhs == "nullptr" ||
+                (rhs == "0" && i + 2 < num_tokens && tokens[i + 2].text == ";" &&
+                 (known_pointers.count(lhs) || state_.has_symbol(lhs)))) {
+                known_pointers.insert(lhs);
                 state_.register_special(lhs, tok.loc, AllocKind::Null, resolve_var_scope(lhs));
             } else if (lhs != rhs && state_.has_symbol(rhs)) {
                 // Check if LHS is a struct field or array element (`s->f = rhs;` or `arr[i] = rhs;`)
@@ -975,7 +972,7 @@ void Analyzer::print_diagnostics(std::ostream& os) const {
     };
 
     const bool is_warning = (mode_ == Mode::WarningOnly);
-    const char* sev_label = is_warning ? "warning: " : "error: ";
+    const char* sev_label = is_warning ? "warning:" : "error:";
     const std::string& sev_color = is_warning ? colors.warning : colors.error;
 
     for (const auto& diag : diagnostics_) {
@@ -986,6 +983,7 @@ void Analyzer::print_diagnostics(std::ostream& os) const {
         if (use_color) os << sev_color;
         os << sev_label;
         if (use_color) os << colors.reset;
+        os << " ";
 
         os << colorize_message(diag.primary_message, use_color, colors) << "\n";
         render_snippet(diag.error_loc, !is_warning);
@@ -996,8 +994,9 @@ void Analyzer::print_diagnostics(std::ostream& os) const {
             if (use_color) os << colors.reset;
 
             if (use_color) os << colors.note;
-            os << "note: ";
+            os << "note:";
             if (use_color) os << colors.reset;
+            os << " ";
 
             os << colorize_message(diag.note_message, use_color, colors) << "\n";
             render_snippet(diag.note_loc, false);

@@ -19,15 +19,14 @@ inline std::string resolve_canonical_path(std::string_view path_str) {
         if (c == '\\') c = '/';
     }
     std::error_code ec;
-    std::filesystem::path p(normalized);
-    std::filesystem::path canon;
-    if (std::filesystem::exists(p, ec)) {
-        canon = std::filesystem::canonical(p, ec);
-        if (ec) {
-            canon = std::filesystem::weakly_canonical(p, ec);
-        }
-    } else {
-        canon = std::filesystem::weakly_canonical(p, ec);
+    std::filesystem::path p = std::filesystem::path(normalized).lexically_normal();
+    std::filesystem::path abs_p = std::filesystem::absolute(p, ec);
+    if (!ec) {
+        p = abs_p.lexically_normal();
+    }
+    std::filesystem::path canon = std::filesystem::weakly_canonical(p, ec);
+    if (ec) {
+        canon = p;
     }
     std::string res = canon.lexically_normal().generic_string();
 #if defined(_WIN32)

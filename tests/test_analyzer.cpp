@@ -1,3 +1,6 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include "analyzer.h"
 #include "safe_c/api.h"
 #include <iostream>
