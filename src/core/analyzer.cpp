@@ -589,6 +589,13 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 cell ? cell->alloc_site : SourceLocation{},
                 "set to null here"
             );
+        } else if (err == ViolationType::UninitializedPointer && checks_.uninit) {
+            record_violation(
+                ViolationType::UninitializedPointer, loc,
+                "'" + sym + "' may be used uninitialized [-Wsafec-uninitialized]",
+                cell ? cell->alloc_site : SourceLocation{},
+                "'" + sym + "' was declared here"
+            );
         } else if (err == ViolationType::OutOfBoundsAccess && checks_.bounds) {
             record_violation(
                 ViolationType::OutOfBoundsAccess, loc,
@@ -617,6 +624,13 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                     std::to_string(offset) + " bytes [-Wsafec-modified-base]",
                 cell ? cell->alloc_site : SourceLocation{},
                 "original allocation base created here"
+            );
+        } else if (err == ViolationType::MismatchedDealloc && checks_.mismatch) {
+            record_violation(
+                ViolationType::MismatchedDealloc, loc,
+                "mismatched deallocation on pointer '" + sym + "' [-Wsafec-mismatched-dealloc]",
+                cell ? cell->alloc_site : SourceLocation{},
+                "allocated here with incompatible allocator"
             );
         }
     };
@@ -719,6 +733,9 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 }
                 if (is_ptr_decl) {
                     known_pointers.insert(var_name);
+                    if (j + 1 < num_tokens && tokens[j + 1].text == ";") {
+                        state_.register_special(var_name, tok.loc, AllocKind::Uninitialized, state_.current_scope());
+                    }
                 }
             }
         }
@@ -726,6 +743,18 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
         if (tok.text == "return") {
             if (!active_range_loops.empty()) {
                 active_range_loops.back().pending_mut = false;
+            }
+            if (checks_.dangling && i + 2 < num_tokens && tokens[i + 1].text == "&") {
+                const std::string& local_sym = tokens[i + 2].text;
+                if (declared_scopes.count(local_sym) && declared_scopes[local_sym] >= 1) {
+                    record_violation(
+                        ViolationType::DanglingStackReturn,
+                        tok.loc,
+                        "function returns address of local variable '" + local_sym + "' [-Wsafec-return-local-addr]",
+                        tok.loc,
+                        "declared here"
+                    );
+                }
             }
             if (i + 1 < num_tokens && state_.has_symbol(tokens[i + 1].text)) {
                 state_.mark_escaped(tokens[i + 1].text);

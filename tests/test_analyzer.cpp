@@ -385,6 +385,9 @@ void test_v1_1_edge_cases() {
     check_fail("tests/compile_fail/out_of_bounds.c", ViolationType::OutOfBoundsAccess);
     check_fail("tests/compile_fail/negative_oob.c", ViolationType::OutOfBoundsAccess);
     check_fail("tests/compile_fail/null_deref.c", ViolationType::NullPointerDeref);
+    check_fail("tests/compile_fail/uninit_deref.c", ViolationType::UninitializedPointer);
+    check_fail("tests/compile_fail/dangling_stack_return.c", ViolationType::DanglingStackReturn);
+    check_fail("tests/compile_fail/mismatched_dealloc.cpp", ViolationType::MismatchedDealloc);
     check_fail("tests/compile_fail/double_delete.cpp", ViolationType::DoubleFree);
     check_fail("tests/compile_fail/modify_vector.cpp", ViolationType::IteratorInvalidation);
     check_fail("tests/compile_fail/container_data_dangling.cpp", ViolationType::IteratorInvalidation);
