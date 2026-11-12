@@ -33,6 +33,7 @@ compile_commands.json
 # Logs
 *.log
 memcheck_runtime.log
+*.txt
 
 # Temporary test outputs
 test_out/
@@ -40,3 +41,5 @@ test_out/
 
 # Private Working Architecture Notes (Excluded from repo)
 SAFE_C_ARCHITECTURE_AND_WORKING.md
+linkedin_post.txt
+post_content.txt
