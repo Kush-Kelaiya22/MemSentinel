@@ -1,6 +1,20 @@
-# Safe-C Toolchain Specs File for GCC / G++ (MinGW-w64 and Linux)
-# Instructs GCC driver to load the Safe-C plugin for all compilations.
-# To disable Safe-C: pass -DSAFE_C_DISABLE, -fplugin-arg-safe_c-disable, or set SAFE_C_DISABLE=1.
+# Safe-C toolchain specs for GCC / G++
+# Loads safe_c automatically unless disabled globally or per invocation.
+#
+# Global/per-TU toggles:
+#   -DSAFE_C_DISABLE          Disable plugin for this invocation
+#   -DSAFE_C_ENABLE           Force-enable plugin (overrides -DSAFE_C_DISABLE / SAFE_C_DISABLE)
+#   -DSAFE_C_WARN_ONLY        Emit warnings instead of halting compilation
+#   -DSAFE_C_FATAL            Halt compilation on violations (default)
+#   -DSAFE_C_NO_LEAKS         Disable heap leak checks
+#   -DSAFE_C_NO_DOUBLE_FREE   Disable double-free checks
+#   -DSAFE_C_NO_UAF           Disable use-after-free checks
+#   -DSAFE_C_NO_BOUNDS        Disable static spatial bounds checks
+#   -DSAFE_C_NO_NULL          Disable null pointer dereference checks
+#   -DSAFE_C_NO_UNINIT        Disable uninitialized pointer checks
+#   -DSAFE_C_NO_MISMATCH      Disable mismatched allocator/deallocator checks
+#   -DSAFE_C_NO_DANGLING      Disable dangling local-address return errors
+#   -DSAFE_C_NO_ARITHMETIC    Disable pointer-arithmetic base-retention checks
 
 *self_spec:
-+ %{!DSAFE_C_DISABLE:%{!DSAFE_CPP_DISABLE:%{!fplugin-arg-safe_c-disable:%{!fplugin-arg-safe_cpp-disable:%{!fplugin*:-fplugin=safe_c}}}}}
++ %{!fplugin-arg-safe_c-disable:%{!fplugin-arg-safe_cpp-disable:%{DSAFE_C_ENABLE|!DSAFE_C_DISABLE:%{DSAFE_C_ENABLE|!DSAFE_CPP_DISABLE:%{!fplugin*:-fplugin=safe_c %{DSAFE_C_ENABLE:-fplugin-arg-safe_c-enable} %{DSAFE_C_WARN_ONLY:-fplugin-arg-safe_c-mode=warn} %{DSAFE_C_FATAL:-fplugin-arg-safe_c-mode=fatal} %{DSAFE_C_NO_LEAKS:-fplugin-arg-safe_c-leaks=off} %{DSAFE_C_NO_DOUBLE_FREE:-fplugin-arg-safe_c-double-free=off} %{DSAFE_C_NO_UAF:-fplugin-arg-safe_c-uaf=off} %{DSAFE_C_NO_BOUNDS:-fplugin-arg-safe_c-bounds=off} %{DSAFE_C_NO_NULL:-fplugin-arg-safe_c-null=off} %{DSAFE_C_NO_UNINIT:-fplugin-arg-safe_c-uninit=off} %{DSAFE_C_NO_MISMATCH:-fplugin-arg-safe_c-mismatch=off} %{DSAFE_C_NO_DANGLING:-fplugin-arg-safe_c-dangling=off} %{DSAFE_C_NO_ARITHMETIC:-fplugin-arg-safe_c-arithmetic=off}} %{!Wno-return-local-addr:%{!DSAFE_C_NO_DANGLING:%{!DSAFE_C_WARN_ONLY:-Werror=return-local-addr}}}}}}}
