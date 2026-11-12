@@ -415,11 +415,12 @@
     <div class="container header-inner">
       <a class="brand" href="#">
         <span>Safe-C</span>
-        <span class="version-pill">v1.2.1</span>
+        <span class="version-pill">v1.2.2</span>
       </a>
       <nav class="nav" aria-label="Primary navigation">
         <a href="#checks">Checks</a>
         <a href="#how-it-works">How It Works</a>
+        <a href="#performance">Performance</a>
         <a href="#install">Install</a>
         <a href="#flags">Flags</a>
         <a href="#diagnostics">Diagnostics</a>
@@ -440,9 +441,9 @@
         C11/C17 &middot; C++20 &middot; Linux (GCC plugin + specs) &amp; Windows (MinGW-w64) &middot; AGPLv3
       </div>
       <div class="btn-row">
-        <a class="btn btn-primary" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.2.1/Safe-C-1.2.1-Linux.tar.gz">Download Linux (.tar.gz)</a>
-        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.2.1/Safe-C-1.2.1-win64.zip">Download Windows (.zip)</a>
-        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.2.1">Release Notes</a>
+        <a class="btn btn-primary" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.2.2/Safe-C-1.2.2-Linux.tar.gz">Download Linux (.tar.gz)</a>
+        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.2.2/Safe-C-1.2.2-win64.zip">Download Windows (.zip)</a>
+        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.2.2">Release Notes</a>
         <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C">Repository</a>
       </div>
     </div>
@@ -784,6 +785,78 @@ tests/compile_fail/altered_pointer_free.c:4:24: note: original allocation base c
     4 |     char* buf = (char*)malloc(32);
       |                        ^~~~~~~~~~</code></pre>
     </section>
+
+    <section id="performance">
+      <h2>Compilation Performance</h2>
+      <p>
+        Safe-C performs a single reverse-postorder (RPO) walk per GIMPLE function body right after SSA construction,
+        avoiding iterative fixpoint solvers or whole-program LTO overhead. Below are median wall-clock compile times
+        across 5 measured runs (1 warmup run) with <code>g++ (GCC) 16.2.1</code> on Intel Core i5-10210U (Linux x86_64)
+        reproduced via <code>python3 tools/benchmark_compile.py --runs 5 --warmup 1</code>.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Scenario</th>
+              <th>Stock GCC/G++</th>
+              <th>With Safe-C</th>
+              <th>Delta</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>C small (<code>valid_edge_cases.c</code>, <code>-O0</code>)</td>
+              <td>25.2 ms</td>
+              <td>22.2 ms</td>
+              <td>-3.0 ms (-11.8%)</td>
+            </tr>
+            <tr>
+              <td>C 120-func heap/loop (<code>-O0</code>)</td>
+              <td>190.3 ms</td>
+              <td>214.4 ms</td>
+              <td>+24.1 ms (+12.6%)</td>
+            </tr>
+            <tr>
+              <td>C 120-func heap/loop (<code>-O2</code>)</td>
+              <td>1375.4 ms</td>
+              <td>1375.7 ms</td>
+              <td>+0.3 ms (+0.0%)</td>
+            </tr>
+            <tr>
+              <td>C++ STL patterns (<code>-O0 -std=c++20</code>)</td>
+              <td>371.7 ms</td>
+              <td>378.0 ms</td>
+              <td>+6.2 ms (+1.7%)</td>
+            </tr>
+            <tr>
+              <td>C++ STL patterns (<code>-O2 -std=c++20</code>)</td>
+              <td>400.3 ms</td>
+              <td>387.8 ms</td>
+              <td>-12.5 ms (-3.1%)</td>
+            </tr>
+            <tr>
+              <td>C++ multi-container STL (<code>-O2 -std=c++20</code>)</td>
+              <td>1501.8 ms</td>
+              <td>1539.7 ms</td>
+              <td>+37.9 ms (+2.5%)</td>
+            </tr>
+            <tr>
+              <td>C++20 real TU <code>analyzer.cpp</code> (<code>-O0</code>)</td>
+              <td>1734.0 ms</td>
+              <td>1752.2 ms</td>
+              <td>+18.2 ms (+1.0%)</td>
+            </tr>
+            <tr>
+              <td>C++20 real TU <code>analyzer.cpp</code> (<code>-O2</code>)</td>
+              <td>3892.9 ms</td>
+              <td>3907.3 ms</td>
+              <td>+14.4 ms (+0.4%)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer">
@@ -792,7 +865,7 @@ tests/compile_fail/altered_pointer_free.c:4:24: note: original allocation base c
         <span>Safe-C &middot; Licensed under AGPLv3</span>
         <nav class="footer-nav" aria-label="Footer navigation">
           <a href="https://github.com/Kush-Kelaiya22/Safe-C">Repository</a>
-          <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.2.1">Releases</a>
+          <a href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.2.2">Releases</a>
           <a href="https://github.com/Kush-Kelaiya22/Safe-C/issues">Issues</a>
           <a href="https://github.com/Kush-Kelaiya22/Safe-C/discussions">Discussions</a>
           <a href="https://github.com/Kush-Kelaiya22/Safe-C/tree/main/wiki">Docs / Wiki</a>

@@ -169,6 +169,28 @@ ctest --test-dir build --output-on-failure
 
 ---
 
+## Compilation Performance Benchmarks
+
+Safe-C analyzes each GIMPLE function body in a single reverse-postorder (RPO) traversal right after SSA construction without iterative fixpoint loops. Median compile times across 5 measured runs (plus 1 warmup run) using `g++ (GCC) 16.2.1 20260810` on Intel Core i5-10210U (Linux 7.2.11, x86\_64):
+
+| Scenario | Stock GCC/G++ (ms) | With Safe-C (ms) | Overhead |
+| :--- | ---: | ---: | ---: |
+| C small (`valid_edge_cases.c`, `-O0`) | 25.2 | 22.2 | -3.0 ms (-11.8%, within noise) |
+| C 120-function heap/loop (`-O0`) | 190.3 | 214.4 | +24.1 ms (+12.6%) |
+| C 120-function heap/loop (`-O2`) | 1375.4 | 1375.7 | +0.3 ms (+0.0%) |
+| C++ STL patterns (`-O0 -std=c++20`) | 371.7 | 378.0 | +6.2 ms (+1.7%) |
+| C++ STL patterns (`-O2 -std=c++20`) | 400.3 | 387.8 | -12.5 ms (-3.1%, within noise) |
+| C++ multi-container STL (`vector`, `map`, `unordered_map`, `string`, `-O2`) | 1501.8 | 1539.7 | +37.9 ms (+2.5%) |
+| C++20 real TU (`src/core/analyzer.cpp`, `-O0`) | 1734.0 | 1752.2 | +18.2 ms (+1.0%) |
+| C++20 real TU (`src/core/analyzer.cpp`, `-O2`) | 3892.9 | 3907.3 | +14.4 ms (+0.4%) |
+
+To reproduce locally:
+```bash
+python3 tools/benchmark_compile.py --runs 5 --warmup 1
+```
+
+---
+
 ## Disabling On Demand
 
 Safe-C static analysis can be disabled per invocation or per environment:

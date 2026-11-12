@@ -68,6 +68,29 @@ ctest --test-dir build --output-on-failure
 
 ---
 
+## Compilation Time Benchmarks
+
+You can benchmark stock `gcc`/`g++` against Safe-C using `tools/benchmark_compile.py` (default: warmup + 7 runs; example below uses 1 warmup + 5 measured runs, median reported).
+
+Measured with `g++ (GCC) 16.2.1 20260810` on Intel Core i5-10210U (8 logical cores, Linux 7.2.11 x86\_64):
+
+| Scenario | Stock (ms) | With Safe-C (ms) | Delta |
+| :--- | ---: | ---: | ---: |
+| C small (`valid_edge_cases.c`, `-O0`) | 25.2 | 22.2 | -3.0 ms (-11.8%) |
+| C 120-func heap/loop (`-O0`) | 190.3 | 214.4 | +24.1 ms (+12.6%) |
+| C 120-func heap/loop (`-O2`) | 1375.4 | 1375.7 | +0.3 ms (+0.0%) |
+| C++ STL patterns (`-O0 -std=c++20`) | 371.7 | 378.0 | +6.2 ms (+1.7%) |
+| C++ STL patterns (`-O2 -std=c++20`) | 400.3 | 387.8 | -12.5 ms (-3.1%) |
+| C++ multi-container STL (`-O2 -std=c++20`) | 1501.8 | 1539.7 | +37.9 ms (+2.5%) |
+| C++20 real TU `analyzer.cpp` (`-O0`) | 1734.0 | 1752.2 | +18.2 ms (+1.0%) |
+| C++20 real TU `analyzer.cpp` (`-O2`) | 3892.9 | 3907.3 | +14.4 ms (+0.4%) |
+
+```bash
+python3 tools/benchmark_compile.py --runs 5 --warmup 1
+```
+
+---
+
 ## Continuous Integration (CI)
 
 Every commit and pull request runs automated CI pipelines on:
