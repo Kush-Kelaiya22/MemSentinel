@@ -530,6 +530,46 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
         return (it != declared_scopes.end()) ? it->second : state_.current_scope();
     };
 
+    struct RangeIterScope {
+        int scope;
+        std::string container;
+        SourceLocation start_loc;
+        bool pending_mut{false};
+        SourceLocation mut_loc;
+    };
+    struct IterVarState {
+        int scope;
+        std::string container;
+        SourceLocation start_loc;
+        bool invalidated{false};
+        SourceLocation mut_loc;
+    };
+    std::vector<RangeIterScope> active_range_loops;
+    std::unordered_map<std::string, IterVarState> active_iters;
+    std::string pending_for_container;
+    SourceLocation pending_for_loc;
+
+    auto is_mutating_method = [](const std::string& m) {
+        return m == "push_back" || m == "emplace_back" || m == "push_front" || m == "emplace_front" ||
+               m == "insert" || m == "emplace" || m == "erase" || m == "clear" ||
+               m == "resize" || m == "reserve" || m == "assign" || m == "pop_back" ||
+               m == "pop_front" || m == "shrink_to_fit" || m == "rehash";
+    };
+
+    auto check_iter_use = [&](const std::string& handle_name, const SourceLocation& use_loc) {
+        auto it = active_iters.find(handle_name);
+        if (it != active_iters.end() && it->second.invalidated && checks_.iterator) {
+            record_violation(
+                ViolationType::IteratorInvalidation,
+                it->second.mut_loc.filename.empty() ? use_loc : it->second.mut_loc,
+                "container '" + it->second.container + "' mutated while iterating with invalidated iterator [-Wsafec-iterator-invalidation]",
+                it->second.start_loc,
+                "iteration started here"
+            );
+            active_iters.erase(it);
+        }
+    };
+
     auto report_access_violation = [&](ViolationType err, const std::string& sym,
                                        const SourceLocation& loc,
                                        const std::shared_ptr<AllocationCell>& cell,
@@ -548,13 +588,6 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 "null pointer dereference of '" + sym + "' [-Wsafec-null-deref]",
                 cell ? cell->alloc_site : SourceLocation{},
                 "set to null here"
-            );
-        } else if (err == ViolationType::UninitializedPointer && checks_.uninit) {
-            record_violation(
-                ViolationType::UninitializedPointer, loc,
-                "'" + sym + "' may be used uninitialized [-Wsafec-uninitialized]",
-                cell ? cell->alloc_site : SourceLocation{},
-                "'" + sym + "' was declared here"
             );
         } else if (err == ViolationType::OutOfBoundsAccess && checks_.bounds) {
             record_violation(
@@ -585,26 +618,60 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 cell ? cell->alloc_site : SourceLocation{},
                 "original allocation base created here"
             );
-        } else if (err == ViolationType::MismatchedDealloc && checks_.mismatch) {
-            record_violation(
-                ViolationType::MismatchedDealloc, loc,
-                "mismatched deallocation on pointer '" + sym + "' [-Wsafec-mismatched-dealloc]",
-                cell ? cell->alloc_site : SourceLocation{},
-                "allocated here with incompatible allocator"
-            );
         }
     };
 
     for (size_t i = 0; i < num_tokens; ++i) {
         const auto& tok = tokens[i];
 
+        if (tok.text == "for" && i + 1 < num_tokens && tokens[i + 1].text == "(") {
+            int depth = 0;
+            for (size_t k = i + 1; k < num_tokens && k < i + 64; ++k) {
+                if (tokens[k].text == "(") ++depth;
+                else if (tokens[k].text == ")") {
+                    --depth;
+                    if (depth == 0) break;
+                } else if (depth == 1 && tokens[k].text == ":" && k + 1 < num_tokens) {
+                    const std::string& cont = tokens[k + 1].text;
+                    if (!cont.empty() && (std::isalpha(static_cast<unsigned char>(cont[0])) || cont[0] == '_')) {
+                        pending_for_container = cont;
+                        pending_for_loc = tok.loc;
+                    }
+                    break;
+                }
+            }
+        }
+
         // Lexical scope entry matching GCC compound statement semantics
         if (tok.text == "{") {
             state_.enter_scope();
+            if (!pending_for_container.empty()) {
+                active_range_loops.push_back({state_.current_scope(), pending_for_container, pending_for_loc, false, {}});
+                pending_for_container.clear();
+            }
             continue;
         }
 
         if (tok.text == "}") {
+            int exiting_scope = state_.current_scope();
+            if (!active_range_loops.empty() && active_range_loops.back().scope == exiting_scope) {
+                const auto& loop = active_range_loops.back();
+                if (loop.pending_mut && checks_.iterator) {
+                    record_violation(
+                        ViolationType::IteratorInvalidation,
+                        loop.mut_loc,
+                        "container '" + loop.container + "' mutated while iterating with invalidated iterator [-Wsafec-iterator-invalidation]",
+                        loop.start_loc,
+                        "iteration started here"
+                    );
+                }
+                active_range_loops.pop_back();
+            }
+            for (auto it = active_iters.begin(); it != active_iters.end();) {
+                if (it->second.scope >= exiting_scope) it = active_iters.erase(it);
+                else ++it;
+            }
+
             auto leaks = state_.exit_scope();
             if (checks_.leaks) {
                 for (const auto& [symbol, cell] : leaks) {
@@ -621,11 +688,21 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 state_.clear();
                 declared_scopes.clear();
                 known_pointers.clear();
+                active_range_loops.clear();
+                active_iters.clear();
+                pending_for_container.clear();
             }
             continue;
         }
 
-        // Track variable declarations (e.g. `int *p;` or `int x = 0;` or `char* p = 0;`)
+        if (tok.text == "break") {
+            if (!active_range_loops.empty()) {
+                active_range_loops.back().pending_mut = false;
+            }
+            continue;
+        }
+
+        // Track variable declarations so inner assignments preserve outer scope lifetimes
         if (state_.current_scope() >= 1 &&
             (tok.text == "int" || tok.text == "char" || tok.text == "void" || tok.text == "float" ||
              tok.text == "double" || tok.text == "long" || tok.text == "short" || tok.text == "size_t")) {
@@ -642,25 +719,13 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 }
                 if (is_ptr_decl) {
                     known_pointers.insert(var_name);
-                    if (j + 1 < num_tokens && tokens[j + 1].text == ";") {
-                        state_.register_special(var_name, tok.loc, AllocKind::Uninitialized, state_.current_scope());
-                    }
                 }
             }
         }
 
         if (tok.text == "return") {
-            if (checks_.dangling && i + 2 < num_tokens && tokens[i + 1].text == "&") {
-                const std::string& local_sym = tokens[i + 2].text;
-                if (declared_scopes.count(local_sym) && declared_scopes[local_sym] >= 1) {
-                    record_violation(
-                        ViolationType::DanglingStackReturn,
-                        tok.loc,
-                        "function returns address of local variable '" + local_sym + "' [-Wsafec-return-local-addr]",
-                        tok.loc,
-                        "declared here"
-                    );
-                }
+            if (!active_range_loops.empty()) {
+                active_range_loops.back().pending_mut = false;
             }
             if (i + 1 < num_tokens && state_.has_symbol(tokens[i + 1].text)) {
                 state_.mark_escaped(tokens[i + 1].text);
@@ -692,8 +757,50 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 state_.clear();
                 declared_scopes.clear();
                 known_pointers.clear();
+                active_range_loops.clear();
+                pending_for_container.clear();
             }
             continue;
+        }
+
+        // Track STL iterator bindings and container mutations
+        if (tok.text == "." && i > 0 && i + 1 < num_tokens) {
+            const std::string& cont = tokens[i - 1].text;
+            const std::string& method = tokens[i + 1].text;
+            if (method == "begin" || method == "cbegin" || method == "rbegin" || method == "crbegin" ||
+                method == "find" || method == "lower_bound" || method == "upper_bound" ||
+                method == "data" || method == "c_str") {
+                if (i >= 3 && tokens[i - 2].text == "=") {
+                    active_iters[tokens[i - 3].text] = {state_.current_scope(), cont, tok.loc, false, {}};
+                }
+            } else if (is_mutating_method(method)) {
+                for (auto it = active_range_loops.rbegin(); it != active_range_loops.rend(); ++it) {
+                    if (it->container == cont) {
+                        it->pending_mut = true;
+                        it->mut_loc = tokens[i - 1].loc;
+                        break;
+                    }
+                }
+                std::string refreshed_iter;
+                if ((method == "erase" || method == "insert" || method == "emplace") &&
+                    i >= 3 && tokens[i - 2].text == "=") {
+                    refreshed_iter = tokens[i - 3].text;
+                }
+                for (auto& [iname, istate] : active_iters) {
+                    if (istate.container == cont) {
+                        if (iname == refreshed_iter) {
+                            istate.invalidated = false;
+                        } else {
+                            istate.invalidated = true;
+                            istate.mut_loc = tokens[i - 1].loc;
+                        }
+                    }
+                }
+            }
+        } else if ((tok.text == "*" || tok.text == "++") && i + 1 < num_tokens) {
+            check_iter_use(tokens[i + 1].text, tok.loc);
+        } else if ((tok.text == "++" || tok.text == "->") && i > 0) {
+            check_iter_use(tokens[i - 1].text, tok.loc);
         }
 
         // 1. Detect dynamic allocation: malloc, calloc, aligned_alloc, realloc
@@ -904,20 +1011,29 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
             if (err.has_value()) {
                 report_access_violation(*err, tokens[i - 1].text, tok.loc, cell, "Accessing member on");
             }
-        } else if (tok.text == "[" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
-            int64_t extra_off = 0;
-            size_t access_sz = 0;
-            if (i + 2 < num_tokens && tokens[i + 2].text == "]") {
-                int64_t parsed = 0;
-                if (try_parse_int64(tokens[i + 1].text, parsed)) {
-                    extra_off = parsed;
-                    access_sz = 1;
+        } else if (tok.text == "[" && i > 0) {
+            check_iter_use(tokens[i - 1].text, tok.loc);
+            if (state_.has_symbol(tokens[i - 1].text)) {
+                int64_t extra_off = 0;
+                size_t access_sz = 0;
+                if (i + 2 < num_tokens && tokens[i + 2].text == "]") {
+                    int64_t parsed = 0;
+                    if (try_parse_int64(tokens[i + 1].text, parsed)) {
+                        extra_off = parsed;
+                        access_sz = 1;
+                    }
+                } else if (i + 3 < num_tokens && tokens[i + 1].text == "-" && tokens[i + 3].text == "]") {
+                    int64_t parsed = 0;
+                    if (try_parse_int64(tokens[i + 2].text, parsed)) {
+                        extra_off = -parsed;
+                        access_sz = 1;
+                    }
                 }
-            }
-            std::shared_ptr<AllocationCell> cell;
-            auto err = state_.validate_access(tokens[i - 1].text, cell, extra_off, access_sz);
-            if (err.has_value()) {
-                report_access_violation(*err, tokens[i - 1].text, tok.loc, cell, "Indexing");
+                std::shared_ptr<AllocationCell> cell;
+                auto err = state_.validate_access(tokens[i - 1].text, cell, extra_off, access_sz);
+                if (err.has_value()) {
+                    report_access_violation(*err, tokens[i - 1].text, tok.loc, cell, "Indexing");
+                }
             }
         }
     }

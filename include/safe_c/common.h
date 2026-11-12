@@ -55,7 +55,8 @@ enum class ViolationType {
     NullPointerDeref,
     UninitializedPointer,
     DanglingStackReturn,
-    MismatchedDealloc
+    MismatchedDealloc,
+    IteratorInvalidation
 };
 
 constexpr std::string_view violation_name(ViolationType type) noexcept {
@@ -71,6 +72,7 @@ constexpr std::string_view violation_name(ViolationType type) noexcept {
         case ViolationType::UninitializedPointer: return "UNINITIALIZED_POINTER";
         case ViolationType::DanglingStackReturn: return "DANGLING_STACK_RETURN";
         case ViolationType::MismatchedDealloc: return "MISMATCHED_DEALLOC";
+        case ViolationType::IteratorInvalidation: return "ITERATOR_INVALIDATION";
     }
     return "UNKNOWN_VIOLATION";
 }

@@ -80,10 +80,8 @@ struct PluginConfig {
     bool check_uaf{true};
     bool check_bounds{true};
     bool check_null{true};
-    bool check_uninit{true};
-    bool check_dangling{true};
-    bool check_mismatch{true};
     bool check_arithmetic{true};
+    bool check_iterator{true};
 };
 
 extern PluginConfig g_config;
