@@ -19,10 +19,12 @@ g++ -fplugin=build/lib/safe_c.so -c app.cpp -o app.o
 
 ### 2. Auto-Loading Specs File
 ```cmd
-gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
-g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
-gcc -specs=build/specs/safe_c.specs main.c -o app.exe
+gcc -specs=src/specs/safe_c.specs -c main.c -o main.o
+g++ -specs=src/specs/safe_c.specs -c app.cpp -o app.o
+gcc -specs=src/specs/safe_c.specs main.c -o app.exe
 ```
+
+> Never copy bare `src/specs/safe_c.specs` over GCC's system `specs` path alone—doing so removes GCC's default `*libgcc:` and `--eh-frame-hdr` entries needed for C++ linking (`_Unwind_Resume`) and exception handling. Always use `tools/integrate_toolchain.py` or merge `*self_spec:` into full `gcc -dumpspecs` output, and export `SAFE_C_DISABLE=1` when building external system packages.
 
 ---
 
