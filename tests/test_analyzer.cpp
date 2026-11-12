@@ -1,3 +1,6 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include "analyzer.h"
 #include "safe_c/api.h"
 #include <iostream>
@@ -265,7 +268,8 @@ void test_gnu_gcc_diagnostic_highlighting() {
     assert(plain.find("    4 | ") != std::string::npos);
     assert(plain.find("      | ") != std::string::npos);
     assert(plain.find("^~~~") != std::string::npos);
-    assert(plain.find("note: Previous deallocation occurred here:") != std::string::npos);
+    assert(plain.find("[-Wsafec-double-free]") != std::string::npos);
+    assert(plain.find("note: previous deallocation here") != std::string::npos);
     assert(plain.find("compilation terminated due to memory safety violations.") != std::string::npos);
     std::cout << "  ✓ Plain text GCC gutter, caret underline, and note formatting verified.\n";
 
@@ -342,6 +346,50 @@ void test_runtime_guardrails() {
     fs::remove(log_file, ec);
 }
 
+void test_v1_1_edge_cases() {
+    using namespace safe_c;
+    using namespace safe_c::core;
+    std::cout << "[Test] v1.1.0 comprehensive edge cases (Core Analyzer / Windows Addon)...\n";
+    Analyzer analyzer(Mode::FatalError);
+
+    auto check = [](bool cond, const char* msg) {
+        if (!cond) {
+            std::cerr << "Assertion failed: " << msg << "\n";
+            std::abort();
+        }
+    };
+
+    // 1. Valid: free(NULL), realloc, scope escape, function return
+    {
+    auto check_pass = [&](const char* rel_path) {
+        Analyzer pass_analyzer(Mode::FatalError);
+        if (!pass_analyzer.analyze_file((fs::path(TEST_SOURCE_DIR) / rel_path).string())) {
+            std::cerr << "Unexpected failure on " << rel_path << ":\n";
+            pass_analyzer.print_diagnostics(std::cerr);
+            std::abort();
+        }
+    };
+        check_pass("tests/compile_pass/valid_edge_cases.c");
+        check_pass("tests/compile_pass/pointer_passing.c");
+        check_pass("tests/compile_pass/scope_changing.c");
+        check_pass("tests/compile_pass/valid_vector_mutation.cpp");
+    }
+
+    // 2. Invalid: dangling stack return, OOB access, null deref, uninit deref, mismatched dealloc
+    auto check_fail = [&](const char* rel_path, ViolationType expected) {
+        Analyzer fail_analyzer(Mode::FatalError);
+        bool ok = fail_analyzer.analyze_file((fs::path(TEST_SOURCE_DIR) / rel_path).string());
+        check(!ok && !fail_analyzer.diagnostics().empty() && fail_analyzer.diagnostics()[0].type == expected, rel_path);
+    };
+    check_fail("tests/compile_fail/dangling_stack_return.c", ViolationType::DanglingStackReturn);
+    check_fail("tests/compile_fail/out_of_bounds.c", ViolationType::OutOfBoundsAccess);
+    check_fail("tests/compile_fail/null_deref.c", ViolationType::NullPointerDeref);
+    check_fail("tests/compile_fail/uninit_deref.c", ViolationType::UninitializedPointer);
+    check_fail("tests/compile_fail/mismatched_dealloc.cpp", ViolationType::MismatchedDealloc);
+
+    std::cout << "  ✓ All v1.1.0 edge cases verified in Core Analyzer.\n";
+}
+
 int main() {
     std::cout << "===================================================\n";
     std::cout << "        Safe-C Comprehensive Verification Suite    \n";
@@ -354,6 +402,7 @@ int main() {
     test_lexical_block_scope_resolution();
     test_gnu_gcc_diagnostic_highlighting();
     test_runtime_guardrails();
+    test_v1_1_edge_cases();
 
     std::cout << "===================================================\n";
     std::cout << "       ALL VERIFICATION TESTS PASSED (100% OK)     \n";

@@ -24,6 +24,18 @@ struct Diagnostic {
     std::string note_message;
 };
 
+struct CheckOptions {
+    bool leaks{true};
+    bool double_free{true};
+    bool uaf{true};
+    bool bounds{true};
+    bool null_deref{true};
+    bool uninit{true};
+    bool dangling{true};
+    bool mismatch{true};
+    bool arithmetic{true};
+};
+
 class Analyzer {
 public:
     explicit Analyzer(Mode mode = Mode::FatalError);
@@ -31,6 +43,9 @@ public:
 
     void set_mode(Mode mode) noexcept { mode_ = mode; }
     [[nodiscard]] Mode mode() const noexcept { return mode_; }
+
+    void set_check_options(const CheckOptions& opts) noexcept { checks_ = opts; }
+    [[nodiscard]] const CheckOptions& check_options() const noexcept { return checks_; }
 
     void set_color_mode(ColorChoice choice) noexcept { color_mode_ = choice; }
     [[nodiscard]] ColorChoice color_mode() const noexcept { return color_mode_; }
@@ -73,6 +88,7 @@ private:
                              const std::vector<SourceLocation>& locations);
 
     Mode mode_{Mode::FatalError};
+    CheckOptions checks_;
     ColorChoice color_mode_{ColorChoice::Auto};
     bool highlight_source_colors_{true};
     StateTable state_;

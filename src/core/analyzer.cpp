@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <charconv>
+#include <unordered_set>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -18,6 +20,22 @@
 #endif
 
 namespace safe_c::core {
+
+static bool try_parse_int64(const std::string& s, int64_t& out) {
+    if (s.empty()) return false;
+    const char* begin = s.data();
+    const char* end = begin + s.size();
+    auto res = std::from_chars(begin, end, out);
+    return res.ec == std::errc{} && res.ptr == end;
+}
+
+static bool try_parse_size(const std::string& s, size_t& out) {
+    if (s.empty()) return false;
+    const char* begin = s.data();
+    const char* end = begin + s.size();
+    auto res = std::from_chars(begin, end, out);
+    return res.ec == std::errc{} && res.ptr == end;
+}
 
 namespace {
 
@@ -279,20 +297,8 @@ std::string highlight_source_line(
 ) {
     if (!use_color) return std::string(line);
 
-    // If whole-line syntax highlighting is disabled, only highlight target token if requested
     if (!enable_highlight) {
-        if (target_col == 0 || target_len == 0 || target_col > line.size()) {
-            return std::string(line);
-        }
-        size_t start = target_col - 1;
-        size_t len = std::min<size_t>(target_len, line.size() - start);
-        std::string res;
-        res += line.substr(0, start);
-        res += (is_error ? colors.error : colors.note);
-        res += line.substr(start, len);
-        res += colors.reset;
-        res += line.substr(start + len);
-        return res;
+        return std::string(line);
     }
 
     static const std::unordered_set<std::string_view> types = {
@@ -515,6 +521,80 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
     auto tokens = tokenize(source_code, filename);
     const size_t num_tokens = tokens.size();
 
+    // Track lexical scope where each variable was declared so inner-block assignments
+    // to outer variables preserve the outer variable's lifetime.
+    std::unordered_map<std::string, int> declared_scopes;
+    std::unordered_set<std::string> known_pointers;
+    auto resolve_var_scope = [&](const std::string& sym) -> int {
+        auto it = declared_scopes.find(sym);
+        return (it != declared_scopes.end()) ? it->second : state_.current_scope();
+    };
+
+    auto report_access_violation = [&](ViolationType err, const std::string& sym,
+                                       const SourceLocation& loc,
+                                       const std::shared_ptr<AllocationCell>& cell,
+                                       const std::string& context_verb) {
+        (void)context_verb;
+        if (err == ViolationType::UseAfterFree && checks_.uaf) {
+            record_violation(
+                ViolationType::UseAfterFree, loc,
+                "use-after-free on pointer '" + sym + "' [-Wsafec-use-after-free]",
+                cell ? cell->free_site : SourceLocation{},
+                "pointer deallocated here"
+            );
+        } else if (err == ViolationType::NullPointerDeref && checks_.null_deref) {
+            record_violation(
+                ViolationType::NullPointerDeref, loc,
+                "null pointer dereference of '" + sym + "' [-Wsafec-null-deref]",
+                cell ? cell->alloc_site : SourceLocation{},
+                "set to null here"
+            );
+        } else if (err == ViolationType::UninitializedPointer && checks_.uninit) {
+            record_violation(
+                ViolationType::UninitializedPointer, loc,
+                "'" + sym + "' may be used uninitialized [-Wsafec-uninitialized]",
+                cell ? cell->alloc_site : SourceLocation{},
+                "'" + sym + "' was declared here"
+            );
+        } else if (err == ViolationType::OutOfBoundsAccess && checks_.bounds) {
+            record_violation(
+                ViolationType::OutOfBoundsAccess, loc,
+                "out-of-bounds memory access on '" + sym + "' [-Wsafec-bounds]",
+                cell ? cell->alloc_site : SourceLocation{},
+                "allocated here with size " + std::to_string(cell ? cell->size_bytes : 0) + " bytes"
+            );
+        }
+    };
+
+    auto report_free_violation = [&](ViolationType err, const std::string& sym,
+                                     const SourceLocation& loc,
+                                     const std::shared_ptr<AllocationCell>& cell,
+                                     int64_t offset) {
+        if (err == ViolationType::DoubleFree && checks_.double_free) {
+            record_violation(
+                ViolationType::DoubleFree, loc,
+                "double free of '" + sym + "' [-Wsafec-double-free]",
+                cell ? cell->free_site : SourceLocation{},
+                "previous deallocation here"
+            );
+        } else if (err == ViolationType::ModifiedBaseFree && checks_.arithmetic) {
+            record_violation(
+                ViolationType::ModifiedBaseFree, loc,
+                "attempt to free interior pointer '" + sym + "' at offset " +
+                    std::to_string(offset) + " bytes [-Wsafec-modified-base]",
+                cell ? cell->alloc_site : SourceLocation{},
+                "original allocation base created here"
+            );
+        } else if (err == ViolationType::MismatchedDealloc && checks_.mismatch) {
+            record_violation(
+                ViolationType::MismatchedDealloc, loc,
+                "mismatched deallocation on pointer '" + sym + "' [-Wsafec-mismatched-dealloc]",
+                cell ? cell->alloc_site : SourceLocation{},
+                "allocated here with incompatible allocator"
+            );
+        }
+    };
+
     for (size_t i = 0; i < num_tokens; ++i) {
         const auto& tok = tokens[i];
 
@@ -524,31 +604,67 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
             continue;
         }
 
-        // Lexical scope exit: deallocations bounded by lexical block
         if (tok.text == "}") {
             auto leaks = state_.exit_scope();
-            for (const auto& [symbol, cell] : leaks) {
-                record_violation(
-                    ViolationType::MemoryLeakUnfreed,
-                    tok.loc,
-                    "[Safe-C] Memory leak detected: dynamically allocated pointer '" + symbol + "' was not freed before exiting scope.",
-                    cell->alloc_site,
-                    "Memory was allocated here and never freed:"
-                );
+            if (checks_.leaks) {
+                for (const auto& [symbol, cell] : leaks) {
+                    record_violation(
+                        ViolationType::MemoryLeakUnfreed,
+                        tok.loc,
+                        "leak of '" + symbol + "' on scope exit [-Wsafec-leak]",
+                        cell->alloc_site,
+                        "allocated here"
+                    );
+                }
             }
             if (state_.current_scope() == 0) {
                 state_.clear();
+                declared_scopes.clear();
+                known_pointers.clear();
             }
             continue;
         }
 
-        // Return statement check: leak detection for unescaped pointers
+        // Track variable declarations (e.g. `int *p;` or `int x = 0;` or `char* p = 0;`)
+        if (state_.current_scope() >= 1 &&
+            (tok.text == "int" || tok.text == "char" || tok.text == "void" || tok.text == "float" ||
+             tok.text == "double" || tok.text == "long" || tok.text == "short" || tok.text == "size_t")) {
+            size_t j = i + 1;
+            bool is_ptr_decl = false;
+            while (j < num_tokens && tokens[j].text == "*") {
+                is_ptr_decl = true;
+                ++j;
+            }
+            if (j < num_tokens && (std::isalpha(static_cast<unsigned char>(tokens[j].text[0])) || tokens[j].text[0] == '_')) {
+                const std::string& var_name = tokens[j].text;
+                if (declared_scopes.find(var_name) == declared_scopes.end()) {
+                    declared_scopes[var_name] = state_.current_scope();
+                }
+                if (is_ptr_decl) {
+                    known_pointers.insert(var_name);
+                    if (j + 1 < num_tokens && tokens[j + 1].text == ";") {
+                        state_.register_special(var_name, tok.loc, AllocKind::Uninitialized, state_.current_scope());
+                    }
+                }
+            }
+        }
+
         if (tok.text == "return") {
-            // Check if return returns one of our pointers: return ptr;
+            if (checks_.dangling && i + 2 < num_tokens && tokens[i + 1].text == "&") {
+                const std::string& local_sym = tokens[i + 2].text;
+                if (declared_scopes.count(local_sym) && declared_scopes[local_sym] >= 1) {
+                    record_violation(
+                        ViolationType::DanglingStackReturn,
+                        tok.loc,
+                        "function returns address of local variable '" + local_sym + "' [-Wsafec-return-local-addr]",
+                        tok.loc,
+                        "declared here"
+                    );
+                }
+            }
             if (i + 1 < num_tokens && state_.has_symbol(tokens[i + 1].text)) {
                 state_.mark_escaped(tokens[i + 1].text);
             }
-            // Check if this is a null check: if (!ptr) return; or if (ptr == NULL) return;
             bool is_null_check = false;
             if (i >= 3) {
                 for (int back = static_cast<int>(i) - 1; back >= 0 && back >= static_cast<int>(i) - 6; --back) {
@@ -561,23 +677,48 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
             }
 
             if (!is_null_check && state_.current_scope() <= 1) {
-                auto leaks = state_.find_leaks();
-                for (const auto& [symbol, cell] : leaks) {
-                    record_violation(
-                        ViolationType::MemoryLeakUnfreed,
-                        tok.loc,
-                        "[Safe-C] Memory leak: Pointer '" + symbol + "' allocated on heap is not deallocated before return.",
-                        cell->alloc_site,
-                        "Original allocation occurred here:"
-                    );
+                if (checks_.leaks) {
+                    auto leaks = state_.find_leaks();
+                    for (const auto& [symbol, cell] : leaks) {
+                        record_violation(
+                            ViolationType::MemoryLeakUnfreed,
+                            tok.loc,
+                            "leak of '" + symbol + "' before return [-Wsafec-leak]",
+                            cell->alloc_site,
+                            "allocated here"
+                        );
+                    }
                 }
                 state_.clear();
+                declared_scopes.clear();
+                known_pointers.clear();
             }
             continue;
         }
 
-        // 1. Detect dynamic allocation: malloc, calloc, aligned_alloc
-        if (tok.text == "malloc" || tok.text == "calloc" || tok.text == "aligned_alloc") {
+        // 1. Detect dynamic allocation: malloc, calloc, aligned_alloc, realloc
+        if (tok.text == "malloc" || tok.text == "calloc" || tok.text == "aligned_alloc" || tok.text == "realloc") {
+            size_t alloc_size = 64;
+            bool size_known = false;
+            if (tok.text == "malloc" && i + 3 < num_tokens && tokens[i + 1].text == "(" &&
+                tokens[i + 3].text == ")") {
+                size_t parsed_sz = 0;
+                if (try_parse_size(tokens[i + 2].text, parsed_sz)) {
+                    alloc_size = parsed_sz;
+                    size_known = true;
+                }
+            }
+            if (tok.text == "realloc" && i + 2 < num_tokens && tokens[i + 1].text == "(") {
+                std::string old_sym = tokens[i + 2].text;
+                if (state_.has_symbol(old_sym)) {
+                    std::shared_ptr<AllocationCell> cell;
+                    int64_t offset = 0;
+                    auto err = state_.register_free(old_sym, tok.loc, cell, offset, AllocKind::Malloc);
+                    if (err.has_value()) {
+                        report_free_violation(*err, old_sym, tok.loc, cell, offset);
+                    }
+                }
+            }
             // Find assigned symbol by looking backwards across '='
             if (i >= 2) {
                 for (int back = static_cast<int>(i) - 1; back >= 0; --back) {
@@ -586,7 +727,10 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                         if (target_sym == "*") {
                             if (back >= 2) target_sym = tokens[back - 2].text;
                         }
-                        state_.register_allocation(target_sym, tok.loc, 64, false, state_.current_scope());
+                        state_.register_allocation(
+                            target_sym, tok.loc, alloc_size, false,
+                            resolve_var_scope(target_sym), AllocKind::Malloc, size_known
+                        );
                         break;
                     }
                     if (tokens[back].text == ";" || tokens[back].text == "{" || tokens[back].text == "}") {
@@ -607,7 +751,11 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
                 for (int back = static_cast<int>(i) - 1; back >= 0; --back) {
                     if (tokens[back].text == "=" && back > 0) {
                         std::string target_sym = tokens[back - 1].text;
-                        state_.register_allocation(target_sym, tok.loc, 64, is_array, state_.current_scope());
+                        state_.register_allocation(
+                            target_sym, tok.loc, 64, is_array,
+                            resolve_var_scope(target_sym),
+                            is_array ? AllocKind::NewArray : AllocKind::New, false
+                        );
                         break;
                     }
                     if (tokens[back].text == ";" || tokens[back].text == "{") {
@@ -618,19 +766,29 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
             continue;
         }
 
-        // 2. Detect pointer assignment / alias: q = p; or q = p + 4;
+        // 2. Detect pointer assignment / alias: q = p; or q = p + 4; or p = NULL; or store into struct/array
         if (tok.text == "=" && i > 0 && i + 1 < num_tokens) {
             std::string lhs = tokens[i - 1].text;
             std::string rhs = tokens[i + 1].text;
-            if (lhs != rhs && state_.has_symbol(rhs)) {
-                int64_t offset_delta = 0;
-                if (i + 3 < num_tokens && (tokens[i + 2].text == "+" || tokens[i + 2].text == "-")) {
-                    try {
-                        int64_t val = std::stoll(tokens[i + 3].text);
-                        offset_delta = (tokens[i + 2].text == "+") ? val : -val;
-                    } catch (...) {}
+            if (rhs == "NULL" || rhs == "nullptr" ||
+                (rhs == "0" && i + 2 < num_tokens && tokens[i + 2].text == ";" &&
+                 (known_pointers.count(lhs) || state_.has_symbol(lhs)))) {
+                known_pointers.insert(lhs);
+                state_.register_special(lhs, tok.loc, AllocKind::Null, resolve_var_scope(lhs));
+            } else if (lhs != rhs && state_.has_symbol(rhs)) {
+                // Check if LHS is a struct field or array element (`s->f = rhs;` or `arr[i] = rhs;`)
+                if (i >= 2 && (tokens[i - 2].text == "->" || tokens[i - 2].text == "." || tokens[i - 1].text == "]")) {
+                    state_.mark_escaped(rhs);
+                } else {
+                    int64_t offset_delta = 0;
+                    if (i + 3 < num_tokens && (tokens[i + 2].text == "+" || tokens[i + 2].text == "-")) {
+                        int64_t val = 0;
+                        if (try_parse_int64(tokens[i + 3].text, val)) {
+                            offset_delta = (tokens[i + 2].text == "+") ? val : -val;
+                        }
+                    }
+                    state_.register_alias(lhs, rhs, offset_delta, resolve_var_scope(lhs));
                 }
-                state_.register_alias(lhs, rhs, offset_delta, state_.current_scope());
             }
         }
 
@@ -641,14 +799,13 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
             const auto* binding = state_.get_binding(sym);
             if (!binding || !binding->cell()) return;
 
-            // Offset can be changed as long as there is a variable that contains the original base address
-            if (!state_.can_alter_offset(sym, delta)) {
+            if (checks_.arithmetic && !state_.can_alter_offset(sym, delta)) {
                 record_violation(
                     ViolationType::ModifiedBaseFree,
                     loc,
-                    "[Safe-C] Cannot alter pointer '" + sym + "' offset: no variable retains the original allocation base address.",
+                    "altering offset of '" + sym + "' loses original base address [-Wsafec-modified-base]",
                     binding->cell()->alloc_site,
-                    "Original allocation occurred here:"
+                    "allocated here"
                 );
             }
             state_.apply_pointer_arithmetic(sym, delta);
@@ -669,20 +826,23 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
         } else if (tok.text == "+=" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
             int64_t val = arch_stride;
             if (i + 1 < num_tokens) {
-                try { val = std::stoll(tokens[i + 1].text); } catch (...) {}
+                int64_t parsed = 0;
+                if (try_parse_int64(tokens[i + 1].text, parsed)) val = parsed;
             }
             check_and_apply_arithmetic(tokens[i - 1].text, val, tok.loc);
         } else if (tok.text == "-=" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
             int64_t val = arch_stride;
             if (i + 1 < num_tokens) {
-                try { val = std::stoll(tokens[i + 1].text); } catch (...) {}
+                int64_t parsed = 0;
+                if (try_parse_int64(tokens[i + 1].text, parsed)) val = parsed;
             }
             check_and_apply_arithmetic(tokens[i - 1].text, -val, tok.loc);
         } else if (tok.text == "=" && i > 0 && i + 3 < num_tokens &&
                    tokens[i - 1].text == tokens[i + 1].text && state_.has_symbol(tokens[i - 1].text) &&
                    (tokens[i + 2].text == "+" || tokens[i + 2].text == "-")) {
             int64_t val = arch_stride;
-            try { val = std::stoll(tokens[i + 3].text); } catch (...) {}
+            int64_t parsed = 0;
+            if (try_parse_int64(tokens[i + 3].text, parsed)) val = parsed;
             int64_t delta = (tokens[i + 2].text == "+") ? val : -val;
             check_and_apply_arithmetic(tokens[i - 1].text, delta, tok.loc);
         }
@@ -690,28 +850,12 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
         // 4. Detect deallocation: free(ptr), delete ptr, delete[] ptr
         if (tok.text == "free" && i + 2 < num_tokens && tokens[i + 1].text == "(") {
             std::string target_sym = tokens[i + 2].text;
-            std::shared_ptr<AllocationCell> cell;
-            int64_t offset = 0;
-            auto err = state_.register_free(target_sym, tok.loc, cell, offset);
-
-            if (err.has_value()) {
-                if (*err == ViolationType::DoubleFree) {
-                    record_violation(
-                        ViolationType::DoubleFree,
-                        tok.loc,
-                        "[Safe-C] Double free detected on pointer '" + target_sym + "'.",
-                        cell ? cell->free_site : SourceLocation{},
-                        "Previous deallocation occurred here:"
-                    );
-                } else if (*err == ViolationType::ModifiedBaseFree) {
-                    record_violation(
-                        ViolationType::ModifiedBaseFree,
-                        tok.loc,
-                        "[Safe-C] Attempt to free altered/interior pointer '" + target_sym + "'. Address was shifted by " +
-                            std::to_string(offset) + " bytes before deallocation.",
-                        cell ? cell->alloc_site : SourceLocation{},
-                        "Original allocation base was created here:"
-                    );
+            if (target_sym != "NULL" && target_sym != "nullptr" && target_sym != "0") {
+                std::shared_ptr<AllocationCell> cell;
+                int64_t offset = 0;
+                auto err = state_.register_free(target_sym, tok.loc, cell, offset, AllocKind::Malloc);
+                if (err.has_value()) {
+                    report_free_violation(*err, target_sym, tok.loc, cell, offset);
                 }
             }
             continue;
@@ -719,76 +863,61 @@ bool Analyzer::analyze_source(std::string_view source_code, std::string_view fil
 
         if (tok.text == "delete") {
             size_t target_idx = i + 1;
+            AllocKind expected_kind = AllocKind::New;
             if (target_idx < num_tokens && tokens[target_idx].text == "[" &&
                 target_idx + 1 < num_tokens && tokens[target_idx + 1].text == "]") {
                 target_idx += 2; // delete[]
+                expected_kind = AllocKind::NewArray;
             }
             if (target_idx < num_tokens) {
                 std::string target_sym = tokens[target_idx].text;
-                std::shared_ptr<AllocationCell> cell;
-                int64_t offset = 0;
-                auto err = state_.register_free(target_sym, tok.loc, cell, offset);
-
-                if (err.has_value()) {
-                    if (*err == ViolationType::DoubleFree) {
-                        record_violation(
-                            ViolationType::DoubleFree,
-                            tok.loc,
-                            "[Safe-C] Double free / delete detected on pointer '" + target_sym + "'.",
-                            cell ? cell->free_site : SourceLocation{},
-                            "Pointer was previously deleted here:"
-                        );
-                    } else if (*err == ViolationType::ModifiedBaseFree) {
-                        record_violation(
-                            ViolationType::ModifiedBaseFree,
-                            tok.loc,
-                            "[Safe-C] Attempt to delete pointer '" + target_sym + "' with modified base offset (offset = " +
-                                std::to_string(offset) + ").",
-                            cell ? cell->alloc_site : SourceLocation{},
-                            "Original allocation occurred here:"
-                        );
+                if (target_sym != "NULL" && target_sym != "nullptr" && target_sym != "0") {
+                    std::shared_ptr<AllocationCell> cell;
+                    int64_t offset = 0;
+                    auto err = state_.register_free(target_sym, tok.loc, cell, offset, expected_kind);
+                    if (err.has_value()) {
+                        report_free_violation(*err, target_sym, tok.loc, cell, offset);
                     }
                 }
             }
             continue;
         }
 
-        // 5. Detect Use-After-Free: *ptr, ptr->field, ptr[i]
-        if (tok.text == "*" && i + 1 < num_tokens && state_.has_symbol(tokens[i + 1].text)) {
+        // 5. Detect Use-After-Free, Null Deref, Uninitialized Deref, Out-Of-Bounds: *ptr, ptr->field, ptr[i]
+        auto is_decl_or_mul_lhs = [&](size_t star_idx) -> bool {
+            if (star_idx == 0) return false;
+            const std::string& prev = tokens[star_idx - 1].text;
+            return prev == "int" || prev == "char" || prev == "void" || prev == "float" ||
+                   prev == "double" || prev == "long" || prev == "short" || prev == "size_t" ||
+                   prev == "const" || prev == "struct" || prev == "unsigned" || prev == "signed" ||
+                   prev == "*";
+        };
+        if (tok.text == "*" && !is_decl_or_mul_lhs(i) && i + 1 < num_tokens && state_.has_symbol(tokens[i + 1].text)) {
             std::shared_ptr<AllocationCell> cell;
             auto err = state_.validate_access(tokens[i + 1].text, cell);
-            if (err.has_value() && *err == ViolationType::UseAfterFree) {
-                record_violation(
-                    ViolationType::UseAfterFree,
-                    tok.loc,
-                    "[Safe-C] Use-After-Free: Pointer '" + tokens[i + 1].text + "' dereferenced after deallocation.",
-                    cell ? cell->free_site : SourceLocation{},
-                    "Pointer was deallocated here:"
-                );
+            if (err.has_value()) {
+                report_access_violation(*err, tokens[i + 1].text, tok.loc, cell, "Dereferencing");
             }
         } else if (tok.text == "->" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
             std::shared_ptr<AllocationCell> cell;
             auto err = state_.validate_access(tokens[i - 1].text, cell);
-            if (err.has_value() && *err == ViolationType::UseAfterFree) {
-                record_violation(
-                    ViolationType::UseAfterFree,
-                    tok.loc,
-                    "[Safe-C] Use-After-Free: Accessing member on freed pointer '" + tokens[i - 1].text + "'.",
-                    cell ? cell->free_site : SourceLocation{},
-                    "Pointer was deallocated here:"
-                );
+            if (err.has_value()) {
+                report_access_violation(*err, tokens[i - 1].text, tok.loc, cell, "Accessing member on");
             }
         } else if (tok.text == "[" && i > 0 && state_.has_symbol(tokens[i - 1].text)) {
+            int64_t extra_off = 0;
+            size_t access_sz = 0;
+            if (i + 2 < num_tokens && tokens[i + 2].text == "]") {
+                int64_t parsed = 0;
+                if (try_parse_int64(tokens[i + 1].text, parsed)) {
+                    extra_off = parsed;
+                    access_sz = 1;
+                }
+            }
             std::shared_ptr<AllocationCell> cell;
-            auto err = state_.validate_access(tokens[i - 1].text, cell);
-            if (err.has_value() && *err == ViolationType::UseAfterFree) {
-                record_violation(
-                    ViolationType::UseAfterFree,
-                    tok.loc,
-                    "[Safe-C] Use-After-Free: Array subscript index on freed pointer '" + tokens[i - 1].text + "'.",
-                    cell ? cell->free_site : SourceLocation{},
-                    "Pointer was deallocated here:"
-                );
+            auto err = state_.validate_access(tokens[i - 1].text, cell, extra_off, access_sz);
+            if (err.has_value()) {
+                report_access_violation(*err, tokens[i - 1].text, tok.loc, cell, "Indexing");
             }
         }
     }
@@ -842,19 +971,22 @@ void Analyzer::print_diagnostics(std::ostream& os) const {
         os << "\n";
     };
 
+    const bool is_warning = (mode_ == Mode::WarningOnly);
+    const char* sev_label = is_warning ? "warning:" : "error:";
+    const std::string& sev_color = is_warning ? colors.warning : colors.error;
+
     for (const auto& diag : diagnostics_) {
-        // Location header: filename:line:col:
         if (use_color) os << colors.locus;
         os << diag.error_loc.filename << ":" << diag.error_loc.line << ":" << diag.error_loc.column << ": ";
         if (use_color) os << colors.reset;
 
-        // Severity: error:
-        if (use_color) os << colors.error;
-        os << "error: ";
+        if (use_color) os << sev_color;
+        os << sev_label;
         if (use_color) os << colors.reset;
+        os << " ";
 
         os << colorize_message(diag.primary_message, use_color, colors) << "\n";
-        render_snippet(diag.error_loc, true);
+        render_snippet(diag.error_loc, !is_warning);
 
         if (!diag.note_message.empty() && !diag.note_loc.filename.empty()) {
             if (use_color) os << colors.locus;
@@ -862,15 +994,16 @@ void Analyzer::print_diagnostics(std::ostream& os) const {
             if (use_color) os << colors.reset;
 
             if (use_color) os << colors.note;
-            os << "note: ";
+            os << "note:";
             if (use_color) os << colors.reset;
+            os << " ";
 
             os << colorize_message(diag.note_message, use_color, colors) << "\n";
             render_snippet(diag.note_loc, false);
         }
     }
 
-    if (!diagnostics_.empty()) {
+    if (!diagnostics_.empty() && !is_warning) {
         if (use_color) os << colors.error;
         os << "compilation terminated due to memory safety violations.\n";
         if (use_color) os << colors.reset;

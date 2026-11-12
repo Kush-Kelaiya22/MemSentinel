@@ -31,11 +31,25 @@ int check_compiler_invocations() {
         return 0;
     }
 
+    bool enabled = true;
     wchar_t env_val[32] = {0};
     if ((GetEnvironmentVariableW(L"SAFE_C_DISABLE", env_val, 32) > 0 ||
          GetEnvironmentVariableW(L"SAFE_CPP_DISABLE", env_val, 32) > 0) &&
         (wcsstr(env_val, L"1") != NULL || _wcsnicmp(env_val, L"true", 4) == 0)) {
-        return 0;
+        enabled = false;
+    }
+    if (GetEnvironmentVariableW(L"SAFE_C_ENABLE", env_val, 32) > 0 &&
+        (wcsstr(env_val, L"1") != NULL || _wcsnicmp(env_val, L"true", 4) == 0)) {
+        enabled = true;
+    }
+
+    safe_c::Mode mode = safe_c::Mode::FatalError;
+    if (GetEnvironmentVariableW(L"SAFE_C_MODE", env_val, 32) > 0) {
+        if (_wcsicmp(env_val, L"warn") == 0) {
+            mode = safe_c::Mode::WarningOnly;
+        } else if (_wcsicmp(env_val, L"off") == 0) {
+            enabled = false;
+        }
     }
 
     int argc = 0;
@@ -45,19 +59,48 @@ int check_compiler_invocations() {
         return 0;
     }
 
-    // Check for disable flags
+    safe_c::core::CheckOptions checks;
     for (int i = 1; i < argc; ++i) {
         std::wstring arg = argv[i];
-        if (arg == L"-fno-safe-c" || arg == L"-fno-safe-cpp" ||
-            arg == L"-fplugin-arg-safe_c-disable" || arg == L"-fplugin-arg-safe_cpp-disable" ||
-            arg == L"--no-safe-c" || arg == L"--no-safe-cpp" ||
-            wcsstr(arg.c_str(), L"SAFE_C_DISABLE") != NULL ||
-            wcsstr(arg.c_str(), L"SAFE_CPP_DISABLE") != NULL ||
-            (arg == L"-D" && i + 1 < argc &&
-             (wcscmp(argv[i+1], L"SAFE_C_DISABLE") == 0 || wcscmp(argv[i+1], L"SAFE_CPP_DISABLE") == 0))) {
-            LocalFree(argv);
-            return 0;
+        if (arg == L"-DSAFE_C_ENABLE" || arg == L"-fplugin-arg-safe_c-enable" ||
+            (arg == L"-D" && i + 1 < argc && wcscmp(argv[i + 1], L"SAFE_C_ENABLE") == 0)) {
+            enabled = true;
+        } else if (arg == L"-fno-safe-c" || arg == L"-fno-safe-cpp" ||
+                   arg == L"-fplugin-arg-safe_c-disable" || arg == L"-fplugin-arg-safe_cpp-disable" ||
+                   arg == L"-fplugin-arg-safe_c-mode=off" ||
+                   arg == L"--no-safe-c" || arg == L"--no-safe-cpp" ||
+                   arg == L"-DSAFE_C_DISABLE" || arg == L"-DSAFE_CPP_DISABLE" ||
+                   (arg == L"-D" && i + 1 < argc &&
+                    (wcscmp(argv[i + 1], L"SAFE_C_DISABLE") == 0 || wcscmp(argv[i + 1], L"SAFE_CPP_DISABLE") == 0))) {
+            enabled = false;
+        } else if (arg == L"-DSAFE_C_WARN_ONLY" || arg == L"-fplugin-arg-safe_c-mode=warn") {
+            mode = safe_c::Mode::WarningOnly;
+        } else if (arg == L"-DSAFE_C_FATAL" || arg == L"-fplugin-arg-safe_c-mode=fatal") {
+            mode = safe_c::Mode::FatalError;
+        } else if (arg == L"-DSAFE_C_NO_LEAKS" || arg == L"-fplugin-arg-safe_c-leaks=off" || arg == L"-fplugin-arg-safe_c-no-leaks") {
+            checks.leaks = false;
+        } else if (arg == L"-DSAFE_C_NO_DOUBLE_FREE" || arg == L"-fplugin-arg-safe_c-double-free=off" || arg == L"-fplugin-arg-safe_c-no-double-free") {
+            checks.double_free = false;
+        } else if (arg == L"-DSAFE_C_NO_UAF" || arg == L"-fplugin-arg-safe_c-uaf=off" || arg == L"-fplugin-arg-safe_c-no-uaf") {
+            checks.uaf = false;
+        } else if (arg == L"-DSAFE_C_NO_BOUNDS" || arg == L"-fplugin-arg-safe_c-bounds=off" || arg == L"-fplugin-arg-safe_c-no-bounds") {
+            checks.bounds = false;
+        } else if (arg == L"-DSAFE_C_NO_NULL" || arg == L"-fplugin-arg-safe_c-null=off" || arg == L"-fplugin-arg-safe_c-no-null") {
+            checks.null_deref = false;
+        } else if (arg == L"-DSAFE_C_NO_UNINIT" || arg == L"-fplugin-arg-safe_c-uninit=off" || arg == L"-fplugin-arg-safe_c-no-uninit") {
+            checks.uninit = false;
+        } else if (arg == L"-DSAFE_C_NO_DANGLING" || arg == L"-fplugin-arg-safe_c-dangling=off" || arg == L"-fplugin-arg-safe_c-no-dangling") {
+            checks.dangling = false;
+        } else if (arg == L"-DSAFE_C_NO_MISMATCH" || arg == L"-fplugin-arg-safe_c-mismatch=off" || arg == L"-fplugin-arg-safe_c-no-mismatch") {
+            checks.mismatch = false;
+        } else if (arg == L"-DSAFE_C_NO_ARITHMETIC" || arg == L"-fplugin-arg-safe_c-arithmetic=off" || arg == L"-fplugin-arg-safe_c-no-arithmetic") {
+            checks.arithmetic = false;
         }
+    }
+
+    if (!enabled) {
+        LocalFree(argv);
+        return 0;
     }
 
     // Inspect files being compiled with address scope resolution
@@ -88,8 +131,8 @@ int check_compiler_invocations() {
         }
     }
 
-    // Run Safe-C static memory safety analyzer
-    safe_c::core::Analyzer analyzer(safe_c::Mode::FatalError);
+    safe_c::core::Analyzer analyzer(mode);
+    analyzer.set_check_options(checks);
 
     // Support standard GCC diagnostic color flags (-fdiagnostics-color, -fno-diagnostics-color)
     safe_c::core::ColorChoice color_choice = safe_c::core::ColorChoice::Auto;
@@ -126,7 +169,6 @@ int check_compiler_invocations() {
     }
 
     if (has_violation) {
-        // Halt compilation directly at compile time
         std::ostringstream oss;
         analyzer.print_diagnostics(oss);
         std::string msg = oss.str();
@@ -134,7 +176,9 @@ int check_compiler_invocations() {
         fprintf(stderr, "%s", msg.c_str());
         fflush(stderr);
 
-        ExitProcess(1);
+        if (mode == safe_c::Mode::FatalError) {
+            ExitProcess(1);
+        }
     }
     return 0;
 }

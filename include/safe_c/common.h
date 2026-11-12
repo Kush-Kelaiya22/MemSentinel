@@ -6,9 +6,9 @@
 #include <string_view>
 
 #define SAFE_C_VERSION_MAJOR 1
-#define SAFE_C_VERSION_MINOR 0
+#define SAFE_C_VERSION_MINOR 1
 #define SAFE_C_VERSION_PATCH 0
-#define SAFE_C_VERSION_STRING "1.0.0"
+#define SAFE_C_VERSION_STRING "1.1.0"
 
 // Minimum supported GCC version: GCC 4.5.0 introduced -fplugin support
 #define SAFE_C_MIN_GCC_MAJOR 4
@@ -50,7 +50,12 @@ enum class ViolationType {
     MemoryLeakUnfreed,
     ModifiedBaseFree,
     UnallocatedFree,
-    DoubleAllocation
+    DoubleAllocation,
+    OutOfBoundsAccess,
+    NullPointerDeref,
+    UninitializedPointer,
+    DanglingStackReturn,
+    MismatchedDealloc
 };
 
 constexpr std::string_view violation_name(ViolationType type) noexcept {
@@ -61,6 +66,11 @@ constexpr std::string_view violation_name(ViolationType type) noexcept {
         case ViolationType::ModifiedBaseFree: return "MODIFIED_BASE_FREE";
         case ViolationType::UnallocatedFree: return "UNALLOCATED_FREE";
         case ViolationType::DoubleAllocation: return "DOUBLE_ALLOCATION";
+        case ViolationType::OutOfBoundsAccess: return "OUT_OF_BOUNDS_ACCESS";
+        case ViolationType::NullPointerDeref: return "NULL_POINTER_DEREF";
+        case ViolationType::UninitializedPointer: return "UNINITIALIZED_POINTER";
+        case ViolationType::DanglingStackReturn: return "DANGLING_STACK_RETURN";
+        case ViolationType::MismatchedDealloc: return "MISMATCHED_DEALLOC";
     }
     return "UNKNOWN_VIOLATION";
 }

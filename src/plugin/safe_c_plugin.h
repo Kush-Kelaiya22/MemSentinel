@@ -71,8 +71,19 @@ namespace safe_c::plugin {
 
 struct PluginConfig {
     bool enabled{true};
+    bool force_enabled{false};
     Mode mode{Mode::FatalError};
     std::string log_file{"safe_c_runtime.log"};
+
+    bool check_leaks{true};
+    bool check_double_free{true};
+    bool check_uaf{true};
+    bool check_bounds{true};
+    bool check_null{true};
+    bool check_uninit{true};
+    bool check_dangling{true};
+    bool check_mismatch{true};
+    bool check_arithmetic{true};
 };
 
 extern PluginConfig g_config;

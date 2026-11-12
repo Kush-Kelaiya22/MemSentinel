@@ -12,7 +12,7 @@
 
 namespace safe_c::core {
 
-// Memory Allocation Cell represents an underlying heap chunk
+// Memory Allocation Cell represents an underlying heap chunk or tracked pointer target
 struct AllocationCell {
     uint64_t cell_id{0};
     SourceLocation alloc_site;
@@ -21,11 +21,16 @@ struct AllocationCell {
     SourceLocation free_site;
     bool is_array{false};
     bool escaped{false};
+    bool size_known{false};
+    bool maybe_freed{false};
     int alloc_scope_depth{0};
+    AllocKind kind{AllocKind::Malloc};
 
-    AllocationCell(uint64_t id, SourceLocation loc, size_t size, bool array = false, int scope_depth = 0)
+    AllocationCell(uint64_t id, SourceLocation loc, size_t size, bool array = false,
+                   int scope_depth = 0, AllocKind alloc_kind = AllocKind::Malloc, bool known_size = false)
         : cell_id(id), alloc_site(std::move(loc)), size_bytes(size),
-          state(Typestate::Allocated), is_array(array), alloc_scope_depth(scope_depth) {}
+          state(Typestate::Allocated), is_array(array), size_known(known_size),
+          alloc_scope_depth(scope_depth), kind(alloc_kind) {}
 };
 
 // Pointer Binding represents a variable or expression pointing to an AllocationCell
@@ -74,8 +79,24 @@ public:
         SourceLocation loc,
         size_t size_bytes,
         bool is_array = false,
+        int scope_depth = 0,
+        AllocKind kind = AllocKind::Malloc,
+        bool size_known = false
+    );
+
+    // Register a non-heap special pointer target (Stack, Null, Uninitialized)
+    std::shared_ptr<AllocationCell> register_special(
+        const std::string& symbol,
+        SourceLocation loc,
+        AllocKind kind,
         int scope_depth = 0
     );
+
+    // Mark a symbol's underlying cell as Null (e.g. on a null-branch edge)
+    void mark_null(const std::string& symbol);
+
+    // Restore a cell from Freed back to Allocated (e.g. when realloc returns NULL)
+    void restore_allocated(const std::string& symbol);
 
     // Register an alias: target = source + offset
     void register_alias(const std::string& target, const std::string& source, int64_t offset_delta = 0, int scope_depth = 0);
@@ -95,17 +116,26 @@ public:
         const std::string& symbol,
         SourceLocation loc,
         std::shared_ptr<AllocationCell>& out_cell,
-        int64_t& out_offset
+        int64_t& out_offset,
+        AllocKind expected_kind = AllocKind::Unknown
     );
 
-    // Validate dereference access (*ptr, ptr->field, ptr[i])
+    // Validate dereference access (*ptr, ptr->field, ptr[i]) and optional spatial bounds
     std::optional<ViolationType> validate_access(
         const std::string& symbol,
-        std::shared_ptr<AllocationCell>& out_cell
+        std::shared_ptr<AllocationCell>& out_cell,
+        int64_t extra_offset = 0,
+        size_t access_size = 0
     ) const;
 
     // Mark pointer as escaped (passed to external function or returned)
     void mark_escaped(const std::string& symbol);
+
+    // Clear a symbol's binding (e.g. when reassigned to an unrelated value)
+    void clear_binding(const std::string& symbol);
+
+    // Merge another incoming CFG state into this state (for join blocks)
+    void merge_from(const StateTable& other);
 
     // Find any unescaped memory leaks remaining at scope exit
     std::vector<std::pair<std::string, std::shared_ptr<AllocationCell>>> find_leaks() const;

@@ -6,6 +6,9 @@ target_link_libraries(safe_c_tests PRIVATE
     safe_c_core
     safe_c_rt_static
 )
+if(UNIX AND NOT APPLE)
+    target_link_libraries(safe_c_tests PRIVATE gcc_s)
+endif()
 
 target_include_directories(safe_c_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/include

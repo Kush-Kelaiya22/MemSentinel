@@ -6,8 +6,9 @@
 namespace safe_c::rt {
 
 AllocationLedger& AllocationLedger::instance() {
-    static AllocationLedger inst;
-    return inst;
+    alignas(AllocationLedger) static unsigned char storage[sizeof(AllocationLedger)];
+    static AllocationLedger* inst = new (storage) AllocationLedger();
+    return *inst;
 }
 
 void AllocationLedger::record_alloc(void* ptr, size_t size, const char* file, int line) {
