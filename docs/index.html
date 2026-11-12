@@ -627,19 +627,36 @@ ctest --test-dir build --output-on-failure</code></pre>
 
       <h3>2. Install Into Linux GCC Compiler Settings</h3>
       <p>
-        Copy the compiled plugin into GCC's plugin directory and install the specs file next to GCC's driver files.
-        Once copied, plain <code>gcc</code> and <code>g++</code> invocations load Safe-C automatically.
+        For non-invasive use that never affects system package builds (such as <code>makepkg</code>, DKMS modules, or GCC updates), keep system GCC untouched and pass <code>-specs=</code> per project or shell alias:
+      </p>
+<pre><code>alias sgcc='gcc -specs=/path/to/Safe-C/src/specs/safe_c.specs -fplugin=/path/to/Safe-C/build/lib/safe_c.so'
+alias sg++='g++ -specs=/path/to/Safe-C/src/specs/safe_c.specs -fplugin=/path/to/Safe-C/build/lib/safe_c.so'</code></pre>
+
+      <p>
+        To enable Safe-C globally on Linux GCC, copy <code>safe_c.so</code> into GCC's plugin folder and merge the <code>*self_spec:</code> rule into GCC's full default <code>-dumpspecs</code> output so <code>*libgcc:</code> and <code>--eh-frame-hdr</code> stay intact for C++ linking and exception unwinding:
       </p>
 <pre><code>sudo cp build/lib/safe_c.so "$(gcc -print-file-name=plugin)/safe_c.so"
-sudo cp src/specs/safe_c.specs "$(dirname "$(gcc -print-libgcc-file-name)")/specs"
+
+SPECS_PATH="$(dirname "$(gcc -print-libgcc-file-name)")/specs"
+sudo rm -f "$SPECS_PATH"
+python3 -c '
+import subprocess
+raw = subprocess.check_output(["gcc", "-dumpspecs"]).decode()
+rule = next(l for l in open("src/specs/safe_c.specs").read().splitlines()
+            if l.strip() and not l.startswith("#") and not l.startswith("*"))
+clean_rule = rule[2:] if rule.startswith("+ ") else rule
+i = raw.find("*self_spec:")
+j = raw.find("\n*cc1_cpu:", i)
+print(raw[:i] + "*self_spec:\n" + clean_rule + "\n" + raw[j:], end="")
+' | sudo tee "$SPECS_PATH" &gt; /dev/null
 
 # Optional runtime guardrail libraries:
 sudo cp build/lib/libsafe_c_rt.so build/lib/libsafe_c_rt.a /usr/local/lib/
 sudo ldconfig</code></pre>
 
       <div class="note-box">
-        <strong>Per-invocation use without editing system GCC folders:</strong>
-        run <code>gcc -specs=src/specs/safe_c.specs -fplugin=build/lib/safe_c.so -c file.c</code>.
+        <strong>System package safety:</strong>
+        Do not overwrite GCC's <code>specs</code> folder with bare <code>safe_c.specs</code> alone, or <code>g++</code> will drop <code>libgcc_s</code> and <code>--eh-frame-hdr</code>. If global specs are enabled, export <code>SAFE_C_DISABLE=1</code> when building third-party packages, and remove <code>"$SPECS_PATH"</code> before or after distro GCC version upgrades.
       </div>
 
       <h3>3. Install Into Windows (MinGW-w64)</h3>

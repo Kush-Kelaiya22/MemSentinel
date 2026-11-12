@@ -128,9 +128,27 @@ def inject_import(exe_path, out_path, dll_name, func_name):
         f.write(data)
     return True
 
+def build_merged_specs(gcc_cmd, specs_src):
+    with open(specs_src, 'r', encoding='utf-8') as f:
+        rule = next(
+            l.strip() for l in f.read().splitlines()
+            if l.strip() and not l.lstrip().startswith('#') and not l.lstrip().startswith('*')
+        )
+    clean_rule = rule[2:] if rule.startswith('+ ') else rule
+
+    raw = subprocess.check_output([gcc_cmd, '-dumpspecs'], text=True)
+    marker = '*self_spec:\n'
+    idx = raw.find(marker)
+    if idx != -1:
+        end_idx = raw.find('\n*cc1_cpu:', idx)
+        if end_idx != -1:
+            return raw[:idx] + marker + clean_rule + '\n' + raw[end_idx:]
+    return raw + '\n\n*self_spec:\n' + clean_rule + '\n\n'
+
 def main():
-    gcc_cmd = sys.argv[1] if len(sys.argv) > 1 else 'gcc'
-    uninstall = '--uninstall' in sys.argv
+    uninstall = '--uninstall' in sys.argv[1:]
+    pos_args = [a for a in sys.argv[1:] if a != '--uninstall']
+    gcc_cmd = pos_args[0] if pos_args else 'gcc'
 
     # Resolve search dirs
     try:
@@ -164,9 +182,13 @@ def main():
         has_plugin_support = False
 
     repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    built_dll = os.path.join(repo_dir, 'build_mingw', 'bin', 'safe_c.dll')
-    if not os.path.exists(built_dll):
-        built_dll = os.path.join(repo_dir, 'build', 'bin', 'safe_c.dll')
+    plugin_ext = '.dll' if os.name == 'nt' else '.so'
+    candidate_bins = [
+        os.path.join(repo_dir, 'build', 'lib', f'safe_c{plugin_ext}'),
+        os.path.join(repo_dir, 'build', 'bin', f'safe_c{plugin_ext}'),
+        os.path.join(repo_dir, 'build_mingw', 'bin', f'safe_c{plugin_ext}'),
+    ]
+    built_dll = next((p for p in candidate_bins if os.path.exists(p)), candidate_bins[0])
 
     if uninstall:
         # Restore backups
@@ -205,14 +227,18 @@ def main():
 
         if plugin_dir and os.path.exists(plugin_dir):
             os.makedirs(plugin_dir, exist_ok=True)
-            dest_dll = os.path.join(plugin_dir, 'safe_c.dll')
+            dest_dll = os.path.join(plugin_dir, f'safe_c{plugin_ext}')
             shutil.copy2(built_dll, dest_dll)
             print(f"Copied plugin to {dest_dll}")
 
             specs_src = os.path.join(repo_dir, 'src', 'specs', 'safe_c.specs')
             dest_specs = os.path.join(install_dir, 'specs')
-            shutil.copy2(specs_src, dest_specs)
-            print(f"Installed specs to {dest_specs}")
+            if os.path.exists(dest_specs):
+                os.remove(dest_specs)
+            merged_specs = build_merged_specs(gcc_cmd, specs_src)
+            with open(dest_specs, 'w', encoding='utf-8') as f:
+                f.write(merged_specs)
+            print(f"Installed merged specs to {dest_specs}")
             print("Safe-C auto-loading successfully enabled via native GCC specs.")
             return 0
 

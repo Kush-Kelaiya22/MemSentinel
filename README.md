@@ -88,10 +88,12 @@ You can also invoke Safe-C explicitly via compiler flags:
 
 ### 4. Auto-Loading via Specs File
 ```cmd
-gcc -specs=build/specs/safe_c.specs -c main.c -o main.o
-g++ -specs=build/specs/safe_c.specs -c app.cpp -o app.o
-gcc -specs=build/specs/safe_c.specs main.c -o app.exe
+gcc -specs=src/specs/safe_c.specs -c main.c -o main.o
+g++ -specs=src/specs/safe_c.specs -c app.cpp -o app.o
+gcc -specs=src/specs/safe_c.specs main.c -o app.exe
 ```
+
+If installing a global `specs` file on Linux (`sudo python3 tools/integrate_toolchain.py` or `sudo rm -f "$SPECS_PATH"` + merging into `gcc -dumpspecs`), never copy bare `src/specs/safe_c.specs` over `/usr/lib/gcc/.../specs` alone—doing so omits GCC's built-in `*libgcc:` and `--eh-frame-hdr` specs needed for C++ `libgcc_s` linking and exception unwinding. Export `SAFE_C_DISABLE=1` when building external system packages.
 
 ### Compiler & Plugin Control Flags
 When integrated via `specs`, individual translation units or builds can enable, disable, downgrade to warnings, or toggle specific checks:
