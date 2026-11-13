@@ -15,11 +15,17 @@ param(
     [Alias("install")]
     [switch]$Install,
 
+    [Alias("update")]
+    [switch]$Update,
+
     [Alias("uninstall")]
     [switch]$Uninstall,
 
     [string]$GccPath = "",
     [string]$GppPath = "",
+    [switch]$FromWeb,
+    [Alias("Version")]
+    [string]$ReleaseTag = "",
     [switch]$NoRuntime,
     [switch]$Yes,
     [switch]$Help
@@ -27,21 +33,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoUrl = "https://github.com/Kush-Kelaiya22/Safe-C"
+if (-not [string]::IsNullOrWhiteSpace($ReleaseTag)) { $FromWeb = $true }
 
 function Show-Usage {
     @"
 Safe-C Toolchain Installer & Uninstaller (Windows)
 
 Usage:
-  powershell -ExecutionPolicy Bypass -File .\install.ps1 [install | uninstall] [OPTIONS]
+  powershell -ExecutionPolicy Bypass -File .\install.ps1 [install | update | uninstall] [OPTIONS]
 
 Actions:
-  install, -Install        Install or update Safe-C into MinGW-w64 GCC/G++
+  install, -Install        Install Safe-C into MinGW-w64 GCC/G++
+  update, -Update          Check GitHub Releases and update if a newer version is available
   uninstall, -Uninstall    Uninstall Safe-C cleanly without disturbing other files
 
 Options:
   -GccPath <path>          Pre-select path to gcc.exe (or toolchain bin directory)
   -GppPath <path>          Pre-select path to g++.exe (defaults to sibling of gcc.exe)
+  -FromWeb                 Download prebuilt plugin, specs, and runtime files from GitHub Releases
+  -ReleaseTag <tag>        Release tag to download from GitHub (implies -FromWeb; default: latest)
   -NoRuntime               Install only plugin and specs (skip libsafe_c_rt/headers)
   -Yes                     Accept confirmations non-interactively
   -Help                    Show this help message
@@ -54,6 +65,7 @@ if ($Help) {
 }
 
 if ($Uninstall) { $Action = "uninstall" }
+elseif ($Update -and [string]::IsNullOrWhiteSpace($Action)) { $Action = "update" }
 elseif ($Install -and [string]::IsNullOrWhiteSpace($Action)) { $Action = "install" }
 
 function Invoke-Capture {
@@ -407,38 +419,118 @@ function Select-Compiler {
 }
 
 function Find-SafeCArtifacts {
+    param([string]$BaseDir = $ScriptDir)
+
     $pluginCandidates = @(
-        (Join-Path $ScriptDir "build\bin\safe_c.dll"),
-        (Join-Path $ScriptDir "bin\safe_c.dll"),
-        (Join-Path $ScriptDir "build_mingw\bin\safe_c.dll"),
-        (Join-Path $ScriptDir "safe_c.dll")
+        (Join-Path $BaseDir "build\bin\safe_c.dll"),
+        (Join-Path $BaseDir "bin\safe_c.dll"),
+        (Join-Path $BaseDir "build_mingw\bin\safe_c.dll"),
+        (Join-Path $BaseDir "safe_c.dll")
     )
     $pluginSrc = $pluginCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 
     $specsCandidates = @(
-        (Join-Path $ScriptDir "src\specs\safe_c.specs"),
-        (Join-Path $ScriptDir "specs\safe_c.specs")
+        (Join-Path $BaseDir "src\specs\safe_c.specs"),
+        (Join-Path $BaseDir "specs\safe_c.specs")
     )
     $specsSrc = $specsCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 
     $rtCandidates = @(
-        (Join-Path $ScriptDir "build\bin\libsafe_c_rt.dll"),
-        (Join-Path $ScriptDir "build\lib\libsafe_c_rt.dll.a"),
-        (Join-Path $ScriptDir "build\lib\libsafe_c_rt.a"),
-        (Join-Path $ScriptDir "bin\libsafe_c_rt.dll"),
-        (Join-Path $ScriptDir "lib\libsafe_c_rt.dll.a"),
-        (Join-Path $ScriptDir "lib\libsafe_c_rt.a")
+        (Join-Path $BaseDir "build\bin\libsafe_c_rt.dll"),
+        (Join-Path $BaseDir "build\lib\libsafe_c_rt.dll.a"),
+        (Join-Path $BaseDir "build\lib\libsafe_c_rt.a"),
+        (Join-Path $BaseDir "bin\libsafe_c_rt.dll"),
+        (Join-Path $BaseDir "lib\libsafe_c_rt.dll.a"),
+        (Join-Path $BaseDir "lib\libsafe_c_rt.a")
     )
     $rtFiles = @($rtCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
 
-    $incDir = Join-Path $ScriptDir "include\safe_c"
+    $incDir = Join-Path $BaseDir "include\safe_c"
     if (-not (Test-Path -LiteralPath $incDir -PathType Container)) { $incDir = "" }
 
+    $detectedVer = ""
+    $cmakeFile = Join-Path $BaseDir "CMakeLists.txt"
+    if (Test-Path -LiteralPath $cmakeFile -PathType Leaf) {
+        $m = Select-String -Path $cmakeFile -Pattern '^\s*VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)' | Select-Object -First 1
+        if ($m) { $detectedVer = "v$($m.Matches[0].Groups[1].Value)" }
+    } elseif ((Split-Path -Leaf $BaseDir) -match '^Safe-C-([0-9]+\.[0-9]+\.[0-9]+)-') {
+        $detectedVer = "v$($Matches[1])"
+    }
+
     return [PSCustomObject]@{
-        PluginSrc = $pluginSrc
-        SpecsSrc  = $specsSrc
-        RtFiles   = $rtFiles
-        HeaderDir = $incDir
+        PluginSrc  = $pluginSrc
+        SpecsSrc   = $specsSrc
+        RtFiles    = $rtFiles
+        HeaderDir  = $incDir
+        TempRoot   = ""
+        VersionTag = $detectedVer
+        SelfScript = ""
+    }
+}
+
+function Resolve-LatestReleaseTag {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $latestUrl = "$RepoUrl/releases/latest"
+    $req = [System.Net.HttpWebRequest]::Create($latestUrl)
+    $req.Method = "HEAD"
+    $req.AllowAutoRedirect = $true
+    $req.UserAgent = "Safe-C-Installer"
+    $resp = $req.GetResponse()
+    try {
+        $finalUri = $resp.ResponseUri.AbsoluteUri
+        if ($finalUri -match '/releases/tag/([^/?#]+)$') {
+            return $Matches[1].Trim()
+        }
+    } finally {
+        $resp.Close()
+    }
+    throw "Could not resolve latest release tag from $latestUrl"
+}
+
+function Get-ArtifactsFromWeb {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $tag = $ReleaseTag.Trim()
+    if ([string]::IsNullOrWhiteSpace($tag) -or $tag -eq "latest") {
+        Write-Host ""
+        Write-Host "Resolving latest Safe-C release from GitHub..."
+        $tag = Resolve-LatestReleaseTag
+    } elseif (-not $tag.StartsWith("v")) {
+        $tag = "v$tag"
+    }
+
+    $ver = $tag.TrimStart("v")
+    $archiveName = "Safe-C-$ver-win64.zip"
+    $dlUrl = "$RepoUrl/releases/download/$tag/$archiveName"
+
+    $tmpRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("safec-web-" + [System.Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $tmpRoot -Force | Out-Null
+    $zipPath = Join-Path $tmpRoot $archiveName
+    $extractDir = Join-Path $tmpRoot "extracted"
+
+    try {
+        Write-Host "Downloading $archiveName ($tag) from GitHub Releases..."
+        Invoke-WebRequest -Uri $dlUrl -OutFile $zipPath -UseBasicParsing
+        Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDir -Force
+
+        $pkgRoot = Join-Path $extractDir "Safe-C-$ver-win64"
+        if (-not (Test-Path -LiteralPath $pkgRoot -PathType Container)) {
+            $firstDir = Get-ChildItem -LiteralPath $extractDir -Directory | Select-Object -First 1
+            $pkgRoot = if ($firstDir) { $firstDir.FullName } else { $extractDir }
+        }
+
+        $arts = Find-SafeCArtifacts -BaseDir $pkgRoot
+        $arts.TempRoot = $tmpRoot
+        $arts.VersionTag = $tag
+        $selfCand = Join-Path $pkgRoot "install.ps1"
+        if (Test-Path -LiteralPath $selfCand -PathType Leaf) { $arts.SelfScript = $selfCand }
+        if ([string]::IsNullOrWhiteSpace($arts.PluginSrc) -or [string]::IsNullOrWhiteSpace($arts.SpecsSrc)) {
+            throw "Downloaded archive did not contain safe_c.dll and safe_c.specs."
+        }
+        Write-Host "[Downloaded] Ready to load $tag from web package." -ForegroundColor Green
+        return $arts
+    } catch {
+        Remove-Item -LiteralPath $tmpRoot -Recurse -Force -ErrorAction SilentlyContinue
+        throw
     }
 }
 
@@ -565,6 +657,7 @@ function Install-Target {
     $manifestLines.Add("# Safe-C installation manifest (managed by install.ps1)")
     $manifestLines.Add("GCC=$GccExe")
     if ($GppExe) { $manifestLines.Add("GPP=$GppExe") }
+    if ($Artifacts.VersionTag) { $manifestLines.Add("SAFE_C_VERSION=$($Artifacts.VersionTag)") }
     $manifestLines.Add("INSTALL_DIR=$($info.InstallDir)")
     $manifestLines.Add("PLUGIN_FILE=$destPlugin")
     $manifestLines.Add("SPECS_FILE=$destSpecs")
@@ -653,60 +746,90 @@ function Invoke-SafeCInstall {
     $sel = Select-Compiler
     if (-not $sel) { Write-Host "Cancelled."; return }
 
-    $artifacts = Find-SafeCArtifacts
-    if ([string]::IsNullOrWhiteSpace($artifacts.PluginSrc)) {
-        $cmake = Get-Command -Name "cmake" -ErrorAction SilentlyContinue | Select-Object -First 1
-        $cmakelists = Join-Path $ScriptDir "CMakeLists.txt"
-        if ($cmake -and (Test-Path -LiteralPath $cmakelists -PathType Leaf)) {
-            Write-Host ""
-            Write-Host "Safe-C binary (safe_c.dll) was not found in build\ or bin\."
-            if (Prompt-YesNo -Message "Configure and build Safe-C into '$ScriptDir\build' now? [Y/n]" -DefaultYes $true) {
-                $genArgs = @("-S", $ScriptDir, "-B", (Join-Path $ScriptDir "build"), "-DCMAKE_BUILD_TYPE=Release")
-                if (Get-Command -Name "ninja" -ErrorAction SilentlyContinue) { $genArgs += @("-G", "Ninja") }
-                $genArgs += "-DCMAKE_C_COMPILER=$($sel.Gcc)"
-                if ($sel.Gpp) { $genArgs += "-DCMAKE_CXX_COMPILER=$($sel.Gpp)" }
-                & $cmake.Source @genArgs
-                if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
-                & $cmake.Source --build (Join-Path $ScriptDir "build") --config Release
-                if ($LASTEXITCODE -ne 0) { throw "CMake build failed." }
-                $artifacts = Find-SafeCArtifacts
+    $artifacts = $null
+    try {
+        if ($FromWeb) {
+            $artifacts = Get-ArtifactsFromWeb
+        } else {
+            $artifacts = Find-SafeCArtifacts
+            if ([string]::IsNullOrWhiteSpace($artifacts.PluginSrc)) {
+                $cmake = Get-Command -Name "cmake" -ErrorAction SilentlyContinue | Select-Object -First 1
+                $cmakelists = Join-Path $ScriptDir "CMakeLists.txt"
+                Write-Host ""
+                Write-Host "Safe-C binary (safe_c.dll) was not found locally in build\ or bin\."
+                if ($cmake -and (Test-Path -LiteralPath $cmakelists -PathType Leaf)) {
+                    if ($Yes) {
+                        $artifacts = Get-ArtifactsFromWeb
+                    } else {
+                        Write-Host "Choose how to obtain Safe-C files:"
+                        Write-Host "  1) Download prebuilt Safe-C release from GitHub Releases (default)"
+                        Write-Host "  2) Build Safe-C locally from source with CMake"
+                        Write-Host "  3) Cancel"
+                        $srcChoice = Read-Host -Prompt "Choose option [1/2/3] (default 1)"
+                        if ([string]::IsNullOrWhiteSpace($srcChoice)) { $srcChoice = "1" }
+                        switch ($srcChoice.Trim()) {
+                            "1" { $artifacts = Get-ArtifactsFromWeb }
+                            "2" {
+                                $genArgs = @("-S", $ScriptDir, "-B", (Join-Path $ScriptDir "build"), "-DCMAKE_BUILD_TYPE=Release")
+                                if (Get-Command -Name "ninja" -ErrorAction SilentlyContinue) { $genArgs += @("-G", "Ninja") }
+                                $genArgs += "-DCMAKE_C_COMPILER=$($sel.Gcc)"
+                                if ($sel.Gpp) { $genArgs += "-DCMAKE_CXX_COMPILER=$($sel.Gpp)" }
+                                & $cmake.Source @genArgs
+                                if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
+                                & $cmake.Source --build (Join-Path $ScriptDir "build") --config Release
+                                if ($LASTEXITCODE -ne 0) { throw "CMake build failed." }
+                                $artifacts = Find-SafeCArtifacts
+                            }
+                            default { Write-Host "Cancelled."; return }
+                        }
+                    }
+                } elseif (Prompt-YesNo -Message "Download latest prebuilt Safe-C release from GitHub Releases? [Y/n]" -DefaultYes $true) {
+                    $artifacts = Get-ArtifactsFromWeb
+                } else {
+                    Write-Host "Cancelled."
+                    return
+                }
             }
         }
-    }
 
-    if ([string]::IsNullOrWhiteSpace($artifacts.PluginSrc)) {
-        throw "safe_c.dll was not found. Build Safe-C first or run inside an extracted release archive."
-    }
-    if ([string]::IsNullOrWhiteSpace($artifacts.SpecsSrc)) {
-        throw "safe_c.specs was not found in src\specs\ or specs\."
-    }
+        if ([string]::IsNullOrWhiteSpace($artifacts.PluginSrc)) {
+            throw "safe_c.dll was not found. Build Safe-C locally or pass -FromWeb."
+        }
+        if ([string]::IsNullOrWhiteSpace($artifacts.SpecsSrc)) {
+            throw "safe_c.specs was not found in src\specs\ or specs\."
+        }
 
-    Write-Host ""
-    Write-Host "Ready to install Safe-C from:"
-    Write-Host "  Plugin source : $($artifacts.PluginSrc)"
-    Write-Host "  Specs source  : $($artifacts.SpecsSrc)"
-    if (-not (Prompt-YesNo -Message "Proceed with installation? [Y/n]" -DefaultYes $true)) {
-        Write-Host "Installation cancelled."
-        return
-    }
+        Write-Host ""
+        Write-Host "Ready to install Safe-C from:"
+        Write-Host "  Plugin source : $($artifacts.PluginSrc)"
+        Write-Host "  Specs source  : $($artifacts.SpecsSrc)"
+        if (-not (Prompt-YesNo -Message "Proceed with installation? [Y/n]" -DefaultYes $true)) {
+            Write-Host "Installation cancelled."
+            return
+        }
 
-    $gccInfo = Get-GccInfo -GccExe $sel.Gcc
-    Install-Target -GccExe $sel.Gcc -GppExe $sel.Gpp -Artifacts $artifacts
+        $gccInfo = Get-GccInfo -GccExe $sel.Gcc
+        Install-Target -GccExe $sel.Gcc -GppExe $sel.Gpp -Artifacts $artifacts
 
-    if ($sel.Gpp) {
-        $gppInfo = Get-GccInfo -GccExe $sel.Gpp
-        if ($gppInfo.InstallDir -and $gppInfo.InstallDir -ne $gccInfo.InstallDir) {
-            Write-Host "Note: g++.exe uses a separate install dir ($($gppInfo.InstallDir)); installing there too..."
-            Install-Target -GccExe $sel.Gpp -GppExe $sel.Gpp -Artifacts $artifacts
+        if ($sel.Gpp) {
+            $gppInfo = Get-GccInfo -GccExe $sel.Gpp
+            if ($gppInfo.InstallDir -and $gppInfo.InstallDir -ne $gccInfo.InstallDir) {
+                Write-Host "Note: g++.exe uses a separate install dir ($($gppInfo.InstallDir)); installing there too..."
+                Install-Target -GccExe $sel.Gpp -GppExe $sel.Gpp -Artifacts $artifacts
+            }
+        }
+
+        Write-Host ""
+        Write-Host "Verifying compiler integration..."
+        Verify-CompilerIntegration -GccExe $sel.Gcc -GppExe $sel.Gpp
+        Write-Host ""
+        Write-Host "Safe-C installation complete. Standard 'gcc' and 'g++' commands now check memory safety automatically." -ForegroundColor Cyan
+        Write-Host "To disable temporarily on a build: set SAFE_C_DISABLE=1  (or pass -DSAFE_C_DISABLE)."
+    } finally {
+        if ($artifacts -and $artifacts.TempRoot -and (Test-Path -LiteralPath $artifacts.TempRoot -PathType Container)) {
+            Remove-Item -LiteralPath $artifacts.TempRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
-
-    Write-Host ""
-    Write-Host "Verifying compiler integration..."
-    Verify-CompilerIntegration -GccExe $sel.Gcc -GppExe $sel.Gpp
-    Write-Host ""
-    Write-Host "Safe-C installation complete. Standard 'gcc' and 'g++' commands now check memory safety automatically." -ForegroundColor Cyan
-    Write-Host "To disable temporarily on a build: set SAFE_C_DISABLE=1  (or pass -DSAFE_C_DISABLE)."
 }
 
 function Uninstall-SingleTarget {
@@ -886,19 +1009,122 @@ function Invoke-SafeCUninstall {
     Write-Host "Safe-C uninstalled cleanly. System compiler and unrelated files were preserved." -ForegroundColor Cyan
 }
 
+function Get-ManifestVersion {
+    param([string]$ManifestPath)
+    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) { return "" }
+    foreach ($line in (Get-Content -LiteralPath $ManifestPath -Encoding UTF8)) {
+        if ($line -match '^SAFE_C_VERSION=(.+)$') {
+            return $Matches[1].Trim()
+        }
+    }
+    return ""
+}
+
+function Test-SemVerGreater {
+    param([string]$Candidate, [string]$Current)
+    if ([string]::IsNullOrWhiteSpace($Current)) { return $true }
+    $cClean = ($Candidate.Trim().TrimStart('v') -replace '-.*$', '')
+    $curClean = ($Current.Trim().TrimStart('v') -replace '-.*$', '')
+    try {
+        return ([version]$cClean -gt [version]$curClean)
+    } catch {
+        return ($cClean -ne $curClean)
+    }
+}
+
+function Update-StandaloneScript {
+    param($Artifacts)
+    if (-not $Artifacts -or [string]::IsNullOrWhiteSpace($Artifacts.SelfScript)) { return }
+    if (-not (Test-Path -LiteralPath $Artifacts.SelfScript -PathType Leaf)) { return }
+    if ((Test-Path -LiteralPath (Join-Path $ScriptDir "CMakeLists.txt") -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $ScriptDir ".git"))) {
+        return
+    }
+    $target = Join-Path $ScriptDir "install.ps1"
+    try {
+        Copy-Item -LiteralPath $Artifacts.SelfScript -Destination $target -Force
+        Write-Host "[Updated]   Script -> $target" -ForegroundColor Green
+    } catch {
+        # Non-fatal if script directory is read-only
+    }
+}
+
+function Invoke-SafeCUpdate {
+    $sel = Select-Compiler
+    if (-not $sel) { Write-Host "Cancelled."; return }
+
+    $gccInfo = Get-GccInfo -GccExe $sel.Gcc
+    $manifestPath = Join-Path $gccInfo.InstallDir "safe_c.manifest"
+    $installedVer = Get-ManifestVersion -ManifestPath $manifestPath
+
+    $targetTag = $ReleaseTag.Trim()
+    Write-Host ""
+    if ([string]::IsNullOrWhiteSpace($targetTag) -or $targetTag -eq "latest") {
+        Write-Host "Checking GitHub Releases for latest Safe-C version..."
+        $targetTag = Resolve-LatestReleaseTag
+    } elseif (-not $targetTag.StartsWith("v")) {
+        $targetTag = "v$targetTag"
+    }
+
+    Write-Host "Version check:" -ForegroundColor Cyan
+    Write-Host ("  Installed : {0}" -f $(if ($installedVer) { $installedVer } else { "not recorded / not installed via manifest" }))
+    Write-Host "  Available : $targetTag"
+
+    if ($installedVer -and -not (Test-SemVerGreater -Candidate $targetTag -Current $installedVer)) {
+        Write-Host ""
+        Write-Host "Safe-C is already up to date ($installedVer)." -ForegroundColor Green
+        if ($Yes) { return }
+        if (-not (Prompt-YesNo -Message "Reinstall $targetTag anyway? [y/N]" -DefaultYes $false)) {
+            return
+        }
+    } else {
+        Write-Host ""
+        if (-not (Prompt-YesNo -Message "Download and install Safe-C ${targetTag}? [Y/n]" -DefaultYes $true)) {
+            Write-Host "Update cancelled."
+            return
+        }
+    }
+
+    $script:ReleaseTag = $targetTag
+    $artifacts = $null
+    try {
+        $artifacts = Get-ArtifactsFromWeb
+        Install-Target -GccExe $sel.Gcc -GppExe $sel.Gpp -Artifacts $artifacts
+        if ($sel.Gpp) {
+            $gppInfo = Get-GccInfo -GccExe $sel.Gpp
+            if ($gppInfo.InstallDir -and $gppInfo.InstallDir -ne $gccInfo.InstallDir) {
+                Write-Host "Note: g++.exe uses a separate install dir ($($gppInfo.InstallDir)); updating there too..."
+                Install-Target -GccExe $sel.Gpp -GppExe $sel.Gpp -Artifacts $artifacts
+            }
+        }
+        Write-Host ""
+        Write-Host "Verifying compiler integration..."
+        Verify-CompilerIntegration -GccExe $sel.Gcc -GppExe $sel.Gpp
+        Update-StandaloneScript -Artifacts $artifacts
+        Write-Host ""
+        Write-Host "Safe-C updated to $targetTag cleanly." -ForegroundColor Cyan
+    } finally {
+        if ($artifacts -and $artifacts.TempRoot -and (Test-Path -LiteralPath $artifacts.TempRoot -PathType Container)) {
+            Remove-Item -LiteralPath $artifacts.TempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($Action)) {
     Write-Host "Safe-C Toolchain Installer & Uninstaller" -ForegroundColor Cyan
-    Write-Host "  1) Install / Update Safe-C into GCC/G++"
-    Write-Host "  2) Uninstall Safe-C cleanly"
-    Write-Host "  3) Exit"
-    $menu = Read-Host -Prompt "Choose action [1/2/3] (default 1)"
+    Write-Host "  1) Install Safe-C into GCC/G++"
+    Write-Host "  2) Update Safe-C (check GitHub Releases)"
+    Write-Host "  3) Uninstall Safe-C cleanly"
+    Write-Host "  4) Exit"
+    $menu = Read-Host -Prompt "Choose action [1/2/3/4] (default 1)"
     if ([string]::IsNullOrWhiteSpace($menu)) { $menu = "1" }
     switch ($menu.Trim().ToLowerInvariant()) {
         "1"         { $Action = "install" }
         "install"   { $Action = "install" }
-        "2"         { $Action = "uninstall" }
+        "2"         { $Action = "update" }
+        "update"    { $Action = "update" }
+        "3"         { $Action = "uninstall" }
         "uninstall" { $Action = "uninstall" }
-        "3"         { exit 0 }
+        "4"         { exit 0 }
         "q"         { exit 0 }
         "exit"      { exit 0 }
         default     { throw "Invalid action choice: $menu" }
@@ -907,6 +1133,7 @@ if ([string]::IsNullOrWhiteSpace($Action)) {
 
 switch ($Action.Trim().ToLowerInvariant()) {
     "install"   { Invoke-SafeCInstall }
+    "update"    { Invoke-SafeCUpdate }
     "uninstall" { Invoke-SafeCUninstall }
     default     { Show-Usage; exit 1 }
 }

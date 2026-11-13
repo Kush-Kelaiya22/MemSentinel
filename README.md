@@ -79,8 +79,13 @@ Safe-C includes interactive installer/uninstaller scripts that automatically det
   # Interactive install / uninstall menu (detects gcc & asks for confirmation or manual path)
   ./install.sh
 
+  # Or download & load prebuilt plugin/specs directly from GitHub Releases (no clone/build needed):
+  curl -4 -fsSLO https://github.com/Kush-Kelaiya22/Safe-C/releases/latest/download/install.sh
+  chmod +x install.sh && ./install.sh --from-web
+
   # Direct CLI modes:
   ./install.sh install --gcc /usr/bin/gcc
+  ./install.sh update
   ./install.sh uninstall
   ```
 
@@ -89,8 +94,13 @@ Safe-C includes interactive installer/uninstaller scripts that automatically det
   # Interactive install / uninstall (detects MinGW-w64 gcc.exe & allows manual path entry)
   powershell -ExecutionPolicy Bypass -File .\install.ps1
 
+  # Or download & load prebuilt plugin/specs directly from GitHub Releases:
+  Invoke-WebRequest https://github.com/Kush-Kelaiya22/Safe-C/releases/latest/download/install.ps1 -OutFile install.ps1
+  powershell -ExecutionPolicy Bypass -File .\install.ps1 -FromWeb
+
   # Direct CLI modes:
   powershell -ExecutionPolicy Bypass -File .\install.ps1 install -GccPath C:\msys64\ucrt64\bin\gcc.exe
+  powershell -ExecutionPolicy Bypass -File .\install.ps1 update
   powershell -ExecutionPolicy Bypass -File .\install.ps1 uninstall
   ```
 
