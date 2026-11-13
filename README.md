@@ -18,6 +18,22 @@ The authoritative single-page technical specification and reference manual is pu
 
 ---
 
+## How Safe-C Differs from Rust and Other Languages
+
+Safe-C is a **compiler plugin for standard C and C++**, not a new programming language, borrow-checked dialect, or garbage-collected runtime:
+
+| Dimension | Safe-C (GCC / G++ Plugin) | Rust | Go / Java / C# | C/C++ Sanitizers (ASan / UBSan) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Codebase changes** | Zero rewrite; compiles existing C11/C17 & C++20 code | Requires rewriting in Rust or wrapping C ABI in `unsafe` | Full language switch + runtime FFI bridge | Zero code rewrite (recompilation flags only) |
+| **Pointers & aliasing** | Allows aliasing raw pointers & arithmetic as long as base offset `0` is preserved | Enforces strict single mutable borrow (`&mut`) rules | Hides raw arithmetic behind GC references | Allows raw pointers; checks happen at runtime |
+| **When bugs fail** | **Compile time** (GCC GIMPLE RPO + AST/token pass) | **Compile time** (borrow checker + type system) | **Runtime** (bounds/null traps + GC) | **Runtime** (only on executed test paths) |
+| **Runtime overhead** | **Zero** by default (optional `libsafe_c_rt` if linked) | Zero (compile-time checks) | GC pauses / tracing overhead | ~2x CPU & high shadow-memory usage |
+| **Adoption control** | Opt-out per file/build (`-DSAFE_C_DISABLE`, `-DSAFE_C_WARN_ONLY`) | All safe code must satisfy the borrow checker | Language-wide managed model | Flag-based per build |
+
+**Scope & trade-off:** Unlike Rust's type system—which mathematically guarantees memory safety and data-race freedom across all safe code—Safe-C performs practical intraprocedural GCC CFG analysis to catch provable leaks, double-frees, UAF, modified-base frees, allocator mismatches, null/uninitialized dereferences, static OOB, dangling stack returns, and STL invalidation without breaking idiomatic C/C++.
+
+---
+
 ## Safety Invariants Enforced
 
 Safe-C verifies typestates and allocation bounds during compilation:

@@ -1,4 +1,4 @@
-# Memory Safety Invariants (v1.2.2)
+# Memory Safety Invariants (v1.2.3)
 
 Safe-C enforces compile-time memory safety across both C and C++ while eliminating false positives on valid, idiomatic pointer patterns.
 
