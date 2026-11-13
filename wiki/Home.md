@@ -8,7 +8,7 @@ Safe-C is a pure compile-time memory safety plugin and toolchain companion addon
 
 ## Key Pages
 
-- **[Memory Safety Invariants](Memory-Safety-Invariants)**: Full matrix of caught violations (leaks, UAF, OOB, null/uninit deref, dangling return, mismatched dealloc, STL iterator invalidation) and zero-false-positive valid patterns (v1.2.3).
+- **[Memory Safety Invariants](Memory-Safety-Invariants)**: Full matrix of caught violations (leaks, UAF, OOB, null/uninit deref, dangling return, mismatched dealloc, STL iterator invalidation) and zero-false-positive valid patterns (v1.3.0).
 - **[Address Scope Resolution](Address-Scope-Resolution)**: How Safe-C canonicalizes file paths (`.\x.c` vs `x.c`) and isolates translation units.
 - **[Pointer Offsets & Invariants](Pointer-Offsets-and-Invariants)**: Rules governing pointer arithmetic and base address preservation.
 - **[Lexical Scope Resolution](Lexical-Scoping)**: Block-level scoping (`{ ... }`), variable lifetime, and scope-exit leak detection.

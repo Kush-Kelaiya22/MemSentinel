@@ -396,6 +396,63 @@ void test_v1_1_edge_cases() {
     std::cout << "  ✓ All edge cases and STL invalidation checks verified in Core Analyzer.\n";
 }
 
+void test_legacy_standards() {
+    using namespace safe_c;
+    using namespace safe_c::core;
+    std::cout << "[Test] Legacy C89/C90 and C++98/C++03 compatibility checks...\n";
+
+    Analyzer pass_analyzer(Mode::FatalError);
+    assert(pass_analyzer.analyze_file(test_path("tests/compile_pass/c89_legacy.c")) &&
+           "c89_legacy.c must analyze cleanly");
+    pass_analyzer.clear();
+    assert(pass_analyzer.analyze_file(test_path("tests/compile_pass/cpp98_legacy.cpp")) &&
+           "cpp98_legacy.cpp must analyze cleanly");
+
+    const char* kr_c89_ok =
+        "int kr_sum(n)\n"
+        "    int n;\n"
+        "{\n"
+        "    int *p;\n"
+        "    p = (int *)malloc(sizeof(int) * 4);\n"
+        "    if (!p) return 0;\n"
+        "    free(p);\n"
+        "    return n;\n"
+        "}\n";
+    pass_analyzer.clear();
+    assert(pass_analyzer.analyze_source(kr_c89_ok, "legacy_kr.c") &&
+           "K&R C89 snippet must pass");
+
+    const char* c89_df =
+        "int bad_c89()\n"
+        "{\n"
+        "    int *p;\n"
+        "    p = (int *)malloc(sizeof(int));\n"
+        "    free(p);\n"
+        "    free(p);\n"
+        "    return 0;\n"
+        "}\n";
+    Analyzer fail_analyzer(Mode::FatalError);
+    bool df_ok = fail_analyzer.analyze_source(c89_df, "legacy_df.c");
+    assert(!df_ok && !fail_analyzer.diagnostics().empty() &&
+           fail_analyzer.diagnostics()[0].type == ViolationType::DoubleFree);
+    (void)df_ok;
+
+    const char* cpp98_dd =
+        "int main() {\n"
+        "    int *p = new int(42);\n"
+        "    delete p;\n"
+        "    delete p;\n"
+        "    return 0;\n"
+        "}\n";
+    fail_analyzer.clear();
+    bool dd_ok = fail_analyzer.analyze_source(cpp98_dd, "legacy_dd.cpp");
+    assert(!dd_ok && !fail_analyzer.diagnostics().empty() &&
+           fail_analyzer.diagnostics()[0].type == ViolationType::DoubleFree);
+    (void)dd_ok;
+
+    std::cout << "  ✓ C89/K&R and C++98/C++03 analyzer compatibility verified.\n";
+}
+
 int main() {
     std::cout << "===================================================\n";
     std::cout << "        Safe-C Comprehensive Verification Suite    \n";
@@ -409,6 +466,7 @@ int main() {
     test_gnu_gcc_diagnostic_highlighting();
     test_runtime_guardrails();
     test_v1_1_edge_cases();
+    test_legacy_standards();
 
     std::cout << "===================================================\n";
     std::cout << "       ALL VERIFICATION TESTS PASSED (100% OK)     \n";
