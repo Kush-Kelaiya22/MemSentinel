@@ -15,6 +15,9 @@ param(
     [Alias("install")]
     [switch]$Install,
 
+    [Alias("update")]
+    [switch]$Update,
+
     [Alias("uninstall")]
     [switch]$Uninstall,
 
@@ -38,10 +41,11 @@ function Show-Usage {
 Safe-C Toolchain Installer & Uninstaller (Windows)
 
 Usage:
-  powershell -ExecutionPolicy Bypass -File .\install.ps1 [install | uninstall] [OPTIONS]
+  powershell -ExecutionPolicy Bypass -File .\install.ps1 [install | update | uninstall] [OPTIONS]
 
 Actions:
-  install, -Install        Install or update Safe-C into MinGW-w64 GCC/G++
+  install, -Install        Install Safe-C into MinGW-w64 GCC/G++
+  update, -Update          Check GitHub Releases and update if a newer version is available
   uninstall, -Uninstall    Uninstall Safe-C cleanly without disturbing other files
 
 Options:
@@ -61,6 +65,7 @@ if ($Help) {
 }
 
 if ($Uninstall) { $Action = "uninstall" }
+elseif ($Update -and [string]::IsNullOrWhiteSpace($Action)) { $Action = "update" }
 elseif ($Install -and [string]::IsNullOrWhiteSpace($Action)) { $Action = "install" }
 
 function Invoke-Capture {
@@ -443,12 +448,23 @@ function Find-SafeCArtifacts {
     $incDir = Join-Path $BaseDir "include\safe_c"
     if (-not (Test-Path -LiteralPath $incDir -PathType Container)) { $incDir = "" }
 
+    $detectedVer = ""
+    $cmakeFile = Join-Path $BaseDir "CMakeLists.txt"
+    if (Test-Path -LiteralPath $cmakeFile -PathType Leaf) {
+        $m = Select-String -Path $cmakeFile -Pattern '^\s*VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)' | Select-Object -First 1
+        if ($m) { $detectedVer = "v$($m.Matches[0].Groups[1].Value)" }
+    } elseif ((Split-Path -Leaf $BaseDir) -match '^Safe-C-([0-9]+\.[0-9]+\.[0-9]+)-') {
+        $detectedVer = "v$($Matches[1])"
+    }
+
     return [PSCustomObject]@{
-        PluginSrc = $pluginSrc
-        SpecsSrc  = $specsSrc
-        RtFiles   = $rtFiles
-        HeaderDir = $incDir
-        TempRoot  = ""
+        PluginSrc  = $pluginSrc
+        SpecsSrc   = $specsSrc
+        RtFiles    = $rtFiles
+        HeaderDir  = $incDir
+        TempRoot   = ""
+        VersionTag = $detectedVer
+        SelfScript = ""
     }
 }
 
@@ -504,6 +520,9 @@ function Get-ArtifactsFromWeb {
 
         $arts = Find-SafeCArtifacts -BaseDir $pkgRoot
         $arts.TempRoot = $tmpRoot
+        $arts.VersionTag = $tag
+        $selfCand = Join-Path $pkgRoot "install.ps1"
+        if (Test-Path -LiteralPath $selfCand -PathType Leaf) { $arts.SelfScript = $selfCand }
         if ([string]::IsNullOrWhiteSpace($arts.PluginSrc) -or [string]::IsNullOrWhiteSpace($arts.SpecsSrc)) {
             throw "Downloaded archive did not contain safe_c.dll and safe_c.specs."
         }
@@ -638,6 +657,7 @@ function Install-Target {
     $manifestLines.Add("# Safe-C installation manifest (managed by install.ps1)")
     $manifestLines.Add("GCC=$GccExe")
     if ($GppExe) { $manifestLines.Add("GPP=$GppExe") }
+    if ($Artifacts.VersionTag) { $manifestLines.Add("SAFE_C_VERSION=$($Artifacts.VersionTag)") }
     $manifestLines.Add("INSTALL_DIR=$($info.InstallDir)")
     $manifestLines.Add("PLUGIN_FILE=$destPlugin")
     $manifestLines.Add("SPECS_FILE=$destSpecs")
@@ -989,19 +1009,122 @@ function Invoke-SafeCUninstall {
     Write-Host "Safe-C uninstalled cleanly. System compiler and unrelated files were preserved." -ForegroundColor Cyan
 }
 
+function Get-ManifestVersion {
+    param([string]$ManifestPath)
+    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) { return "" }
+    foreach ($line in (Get-Content -LiteralPath $ManifestPath -Encoding UTF8)) {
+        if ($line -match '^SAFE_C_VERSION=(.+)$') {
+            return $Matches[1].Trim()
+        }
+    }
+    return ""
+}
+
+function Test-SemVerGreater {
+    param([string]$Candidate, [string]$Current)
+    if ([string]::IsNullOrWhiteSpace($Current)) { return $true }
+    $cClean = ($Candidate.Trim().TrimStart('v') -replace '-.*$', '')
+    $curClean = ($Current.Trim().TrimStart('v') -replace '-.*$', '')
+    try {
+        return ([version]$cClean -gt [version]$curClean)
+    } catch {
+        return ($cClean -ne $curClean)
+    }
+}
+
+function Update-StandaloneScript {
+    param($Artifacts)
+    if (-not $Artifacts -or [string]::IsNullOrWhiteSpace($Artifacts.SelfScript)) { return }
+    if (-not (Test-Path -LiteralPath $Artifacts.SelfScript -PathType Leaf)) { return }
+    if ((Test-Path -LiteralPath (Join-Path $ScriptDir "CMakeLists.txt") -PathType Leaf) -or (Test-Path -LiteralPath (Join-Path $ScriptDir ".git"))) {
+        return
+    }
+    $target = Join-Path $ScriptDir "install.ps1"
+    try {
+        Copy-Item -LiteralPath $Artifacts.SelfScript -Destination $target -Force
+        Write-Host "[Updated]   Script -> $target" -ForegroundColor Green
+    } catch {
+        # Non-fatal if script directory is read-only
+    }
+}
+
+function Invoke-SafeCUpdate {
+    $sel = Select-Compiler
+    if (-not $sel) { Write-Host "Cancelled."; return }
+
+    $gccInfo = Get-GccInfo -GccExe $sel.Gcc
+    $manifestPath = Join-Path $gccInfo.InstallDir "safe_c.manifest"
+    $installedVer = Get-ManifestVersion -ManifestPath $manifestPath
+
+    $targetTag = $ReleaseTag.Trim()
+    Write-Host ""
+    if ([string]::IsNullOrWhiteSpace($targetTag) -or $targetTag -eq "latest") {
+        Write-Host "Checking GitHub Releases for latest Safe-C version..."
+        $targetTag = Resolve-LatestReleaseTag
+    } elseif (-not $targetTag.StartsWith("v")) {
+        $targetTag = "v$targetTag"
+    }
+
+    Write-Host "Version check:" -ForegroundColor Cyan
+    Write-Host ("  Installed : {0}" -f $(if ($installedVer) { $installedVer } else { "not recorded / not installed via manifest" }))
+    Write-Host "  Available : $targetTag"
+
+    if ($installedVer -and -not (Test-SemVerGreater -Candidate $targetTag -Current $installedVer)) {
+        Write-Host ""
+        Write-Host "Safe-C is already up to date ($installedVer)." -ForegroundColor Green
+        if ($Yes) { return }
+        if (-not (Prompt-YesNo -Message "Reinstall $targetTag anyway? [y/N]" -DefaultYes $false)) {
+            return
+        }
+    } else {
+        Write-Host ""
+        if (-not (Prompt-YesNo -Message "Download and install Safe-C ${targetTag}? [Y/n]" -DefaultYes $true)) {
+            Write-Host "Update cancelled."
+            return
+        }
+    }
+
+    $script:ReleaseTag = $targetTag
+    $artifacts = $null
+    try {
+        $artifacts = Get-ArtifactsFromWeb
+        Install-Target -GccExe $sel.Gcc -GppExe $sel.Gpp -Artifacts $artifacts
+        if ($sel.Gpp) {
+            $gppInfo = Get-GccInfo -GccExe $sel.Gpp
+            if ($gppInfo.InstallDir -and $gppInfo.InstallDir -ne $gccInfo.InstallDir) {
+                Write-Host "Note: g++.exe uses a separate install dir ($($gppInfo.InstallDir)); updating there too..."
+                Install-Target -GccExe $sel.Gpp -GppExe $sel.Gpp -Artifacts $artifacts
+            }
+        }
+        Write-Host ""
+        Write-Host "Verifying compiler integration..."
+        Verify-CompilerIntegration -GccExe $sel.Gcc -GppExe $sel.Gpp
+        Update-StandaloneScript -Artifacts $artifacts
+        Write-Host ""
+        Write-Host "Safe-C updated to $targetTag cleanly." -ForegroundColor Cyan
+    } finally {
+        if ($artifacts -and $artifacts.TempRoot -and (Test-Path -LiteralPath $artifacts.TempRoot -PathType Container)) {
+            Remove-Item -LiteralPath $artifacts.TempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($Action)) {
     Write-Host "Safe-C Toolchain Installer & Uninstaller" -ForegroundColor Cyan
-    Write-Host "  1) Install / Update Safe-C into GCC/G++"
-    Write-Host "  2) Uninstall Safe-C cleanly"
-    Write-Host "  3) Exit"
-    $menu = Read-Host -Prompt "Choose action [1/2/3] (default 1)"
+    Write-Host "  1) Install Safe-C into GCC/G++"
+    Write-Host "  2) Update Safe-C (check GitHub Releases)"
+    Write-Host "  3) Uninstall Safe-C cleanly"
+    Write-Host "  4) Exit"
+    $menu = Read-Host -Prompt "Choose action [1/2/3/4] (default 1)"
     if ([string]::IsNullOrWhiteSpace($menu)) { $menu = "1" }
     switch ($menu.Trim().ToLowerInvariant()) {
         "1"         { $Action = "install" }
         "install"   { $Action = "install" }
-        "2"         { $Action = "uninstall" }
+        "2"         { $Action = "update" }
+        "update"    { $Action = "update" }
+        "3"         { $Action = "uninstall" }
         "uninstall" { $Action = "uninstall" }
-        "3"         { exit 0 }
+        "4"         { exit 0 }
         "q"         { exit 0 }
         "exit"      { exit 0 }
         default     { throw "Invalid action choice: $menu" }
@@ -1010,6 +1133,7 @@ if ([string]::IsNullOrWhiteSpace($Action)) {
 
 switch ($Action.Trim().ToLowerInvariant()) {
     "install"   { Invoke-SafeCInstall }
+    "update"    { Invoke-SafeCUpdate }
     "uninstall" { Invoke-SafeCUninstall }
     default     { Show-Usage; exit 1 }
 }

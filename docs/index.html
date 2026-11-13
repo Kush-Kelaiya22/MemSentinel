@@ -923,11 +923,13 @@ ctest --test-dir build --output-on-failure</code></pre>
 <pre><code># Linux / POSIX / MSYS2 / Git Bash:
 ./install.sh              # interactive menu (detects gcc, asks confirmation or manual path)
 ./install.sh --from-web   # fetch prebuilt plugin &amp; specs directly from GitHub Releases
+./install.sh update       # check GitHub Releases and update when a newer version is released
 ./install.sh uninstall    # cleanly removes Safe-C and restores any prior specs backup
 
 # Windows (PowerShell):
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -FromWeb
+powershell -ExecutionPolicy Bypass -File .\install.ps1 update
 powershell -ExecutionPolicy Bypass -File .\install.ps1 uninstall</code></pre>
 
       <h3>3. Non-Invasive Alias or Manual System GCC Setup</h3>

@@ -11,8 +11,9 @@ Safe-C includes interactive shell scripts for Linux/POSIX/MSYS2 (`install.sh`) a
 
 ```bash
 # Linux / MSYS2 / Git Bash:
-./install.sh              # interactive menu (Install / Uninstall)
+./install.sh              # interactive menu (Install / Update / Uninstall)
 ./install.sh --from-web   # download prebuilt plugin/specs directly from GitHub Releases
+./install.sh update       # check GitHub Releases and update if a newer version exists
 ./install.sh uninstall    # clean removal without touching unrelated system files
 ```
 
@@ -20,6 +21,7 @@ Safe-C includes interactive shell scripts for Linux/POSIX/MSYS2 (`install.sh`) a
 # Windows PowerShell:
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -FromWeb
+powershell -ExecutionPolicy Bypass -File .\install.ps1 update
 powershell -ExecutionPolicy Bypass -File .\install.ps1 uninstall
 ```
 

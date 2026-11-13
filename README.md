@@ -85,6 +85,7 @@ Safe-C includes interactive installer/uninstaller scripts that automatically det
 
   # Direct CLI modes:
   ./install.sh install --gcc /usr/bin/gcc
+  ./install.sh update
   ./install.sh uninstall
   ```
 
@@ -99,6 +100,7 @@ Safe-C includes interactive installer/uninstaller scripts that automatically det
 
   # Direct CLI modes:
   powershell -ExecutionPolicy Bypass -File .\install.ps1 install -GccPath C:\msys64\ucrt64\bin\gcc.exe
+  powershell -ExecutionPolicy Bypass -File .\install.ps1 update
   powershell -ExecutionPolicy Bypass -File .\install.ps1 uninstall
   ```
 

@@ -17,6 +17,8 @@ FROM_WEB=0
 RELEASE_TAG=""
 REPO_URL="https://github.com/Kush-Kelaiya22/Safe-C"
 WEB_TMP_DIR=""
+ARTIFACT_VERSION=""
+DOWNLOADED_SELF_SH=""
 
 cleanup_web() {
     if [[ -n "${WEB_TMP_DIR:-}" && -d "$WEB_TMP_DIR" ]]; then
@@ -30,10 +32,11 @@ usage() {
 Safe-C Toolchain Installer & Uninstaller
 
 Usage:
-  ./install.sh [install | uninstall] [OPTIONS]
+  ./install.sh [install | update | uninstall] [OPTIONS]
 
 Actions:
-  install, --install       Install or update Safe-C into GCC/G++ (interactive menu default)
+  install, --install       Install Safe-C into GCC/G++ (interactive menu default)
+  update, --update         Check GitHub Releases and update if a newer version is available
   uninstall, --uninstall   Uninstall Safe-C from GCC/G++ without disturbing other files
 
 Options:
@@ -49,6 +52,7 @@ Options:
 Examples:
   ./install.sh
   ./install.sh --from-web
+  ./install.sh update
   ./install.sh install --from-web --release v1.2.3 --gcc /usr/bin/gcc
   ./install.sh uninstall
   ./install.sh --uninstall --gcc /opt/mingw64/bin/gcc.exe --yes
@@ -59,6 +63,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         install|--install)
             ACTION="install"
+            shift
+            ;;
+        update|--update)
+            ACTION="update"
             shift
             ;;
         uninstall|--uninstall)
@@ -694,8 +702,76 @@ download_from_web() {
         echo "Error: Downloaded archive did not contain safe_c${PLUGIN_EXT} and safe_c.specs." >&2
         return 1
     fi
+    ARTIFACT_VERSION="$tag"
+    [[ -f "$pkg_root/install.sh" ]] && DOWNLOADED_SELF_SH="$pkg_root/install.sh"
     echo "[Downloaded] Ready to load ${tag} from web package."
     return 0
+}
+
+detect_local_version() {
+    local v=""
+    if [[ -n "$ARTIFACT_VERSION" ]]; then
+        printf '%s' "$ARTIFACT_VERSION"
+        return 0
+    fi
+    if [[ -f "$SCRIPT_DIR/CMakeLists.txt" ]]; then
+        v="$(awk '/^[[:space:]]*VERSION[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+/{print $2; exit}' "$SCRIPT_DIR/CMakeLists.txt")"
+    fi
+    if [[ -z "$v" ]]; then
+        local base_name
+        base_name="$(basename -- "$SCRIPT_DIR")"
+        if [[ "$base_name" =~ ^Safe-C-([0-9]+\.[0-9]+\.[0-9]+)- ]]; then
+            v="${BASH_REMATCH[1]}"
+        fi
+    fi
+    [[ -n "$v" && "$v" != v* ]] && v="v$v"
+    printf '%s' "$v"
+}
+
+semver_gt() {
+    # Returns 0 if version $1 > $2 (ignoring leading 'v' and pre-release suffixes)
+    local v1="${1#v}" v2="${2#v}"
+    v1="${v1%%-*}"
+    v2="${v2%%-*}"
+    local a1=0 a2=0 a3=0 b1=0 b2=0 b3=0
+    IFS='.' read -r a1 a2 a3 <<< "$v1"
+    IFS='.' read -r b1 b2 b3 <<< "$v2"
+    a1="${a1:-0}"; a2="${a2:-0}"; a3="${a3:-0}"
+    b1="${b1:-0}"; b2="${b2:-0}"; b3="${b3:-0}"
+    if (( 10#$a1 != 10#$b1 )); then
+        (( 10#$a1 > 10#$b1 ))
+        return $?
+    fi
+    if (( 10#$a2 != 10#$b2 )); then
+        (( 10#$a2 > 10#$b2 ))
+        return $?
+    fi
+    (( 10#$a3 > 10#$b3 ))
+}
+
+read_manifest_version() {
+    local manifest="$1"
+    [[ -f "$manifest" ]] || return 0
+    awk -F= '/^SAFE_C_VERSION=/{print $2; exit}' "$manifest"
+}
+
+self_update_script_if_standalone() {
+    # Update standalone copy only outside source git repository
+    if [[ -z "$DOWNLOADED_SELF_SH" || ! -f "$DOWNLOADED_SELF_SH" ]]; then
+        return 0
+    fi
+    if [[ -f "$SCRIPT_DIR/CMakeLists.txt" || -d "$SCRIPT_DIR/.git" ]]; then
+        return 0
+    fi
+    local self_target="$SCRIPT_DIR/install.sh"
+    if [[ -w "$SCRIPT_DIR" ]] && ! cmp -s "$DOWNLOADED_SELF_SH" "$self_target" 2>/dev/null; then
+        local staged
+        staged="$(mktemp "${self_target}.tmp.XXXXXX")"
+        cp -f "$DOWNLOADED_SELF_SH" "$staged"
+        chmod +x "$staged"
+        mv -f "$staged" "$self_target"
+        echo "[Updated] Script -> $(to_native_path "$self_target")"
+    fi
 }
 
 build_local_project() {
@@ -888,10 +964,13 @@ install_single_target() {
 
     generate_merged_specs "$gcc_cmd" "$SPECS_SRC" "$tmp_specs"
 
+    local ver_tag
+    ver_tag="$(detect_local_version)"
     {
         echo "# Safe-C installation manifest (managed by install.sh)"
         echo "GCC=$(to_native_path "$gcc_cmd")"
         [[ -n "$gpp_cmd" ]] && echo "GPP=$(to_native_path "$gpp_cmd")"
+        [[ -n "$ver_tag" ]] && echo "SAFE_C_VERSION=$ver_tag"
         echo "INSTALL_DIR=$install_dir"
     } > "$tmp_manifest"
 
@@ -1073,9 +1152,83 @@ do_install() {
         fi
         return 1
     fi
+    self_update_script_if_standalone
     echo ""
     echo "Safe-C installation complete. Standard 'gcc' and 'g++' commands now check memory safety automatically."
     echo "To disable temporarily on a build: export SAFE_C_DISABLE=1  (or pass -DSAFE_C_DISABLE)."
+}
+
+do_update() {
+    select_compiler_interactive || return 1
+
+    query_gcc_info "$SELECTED_GCC"
+    local gcc_install="$Q_INSTALL_DIR"
+    local gpp_install="$gcc_install"
+    if [[ -n "$SELECTED_GPP" ]]; then
+        query_gcc_info "$SELECTED_GPP"
+        gpp_install="$Q_INSTALL_DIR"
+    fi
+
+    local installed_ver=""
+    installed_ver="$(read_manifest_version "$gcc_install/safe_c.manifest")"
+
+    local target_tag="$RELEASE_TAG"
+    echo ""
+    if [[ -z "$target_tag" || "$target_tag" == "latest" ]]; then
+        echo "Checking GitHub Releases for latest Safe-C version..."
+        if ! target_tag="$(resolve_latest_release_tag)" || [[ -z "$target_tag" ]]; then
+            echo "Error: Could not resolve latest release tag from ${REPO_URL}/releases/latest." >&2
+            return 1
+        fi
+    elif [[ "$target_tag" != v* ]]; then
+        target_tag="v$target_tag"
+    fi
+
+    echo "Version check:"
+    echo "  Installed : ${installed_ver:-not recorded / not installed via manifest}"
+    echo "  Available : ${target_tag}"
+
+    if [[ -n "$installed_ver" ]] && ! semver_gt "$target_tag" "$installed_ver"; then
+        echo ""
+        echo "Safe-C is already up to date (${installed_ver})."
+        if [[ "$ASSUME_YES" -eq 1 ]]; then
+            return 0
+        fi
+        if ! prompt_yn "Reinstall ${target_tag} anyway? [y/N]:" "N"; then
+            return 0
+        fi
+    else
+        echo ""
+        if ! prompt_yn "Download and install Safe-C ${target_tag}? [Y/n]:" "Y"; then
+            echo "Update cancelled."
+            return 0
+        fi
+    fi
+
+    RELEASE_TAG="$target_tag"
+    FROM_WEB=1
+    download_from_web || return 1
+
+    install_single_target "$SELECTED_GCC" "$SELECTED_GPP"
+    if [[ -n "$SELECTED_GPP" && -n "$gpp_install" && "$gpp_install" != "$gcc_install" ]]; then
+        echo ""
+        echo "Note: g++ resolves to a separate GCC install directory ($gpp_install); updating there too..."
+        install_single_target "$SELECTED_GPP" "$SELECTED_GPP"
+    fi
+
+    if ! verify_toolchain_works "$SELECTED_GCC" "$SELECTED_GPP"; then
+        echo "" >&2
+        echo "Verification failed; reverting Safe-C update so your compiler stays intact..." >&2
+        ASSUME_YES=1 uninstall_single_target "$SELECTED_GCC" || true
+        if [[ -n "$SELECTED_GPP" && -n "$gpp_install" && "$gpp_install" != "$gcc_install" ]]; then
+            ASSUME_YES=1 uninstall_single_target "$SELECTED_GPP" || true
+        fi
+        return 1
+    fi
+
+    self_update_script_if_standalone
+    echo ""
+    echo "Safe-C updated to ${target_tag} cleanly."
 }
 
 uninstall_single_target() {
@@ -1257,22 +1410,25 @@ do_uninstall() {
 main() {
     if [[ -z "$ACTION" ]]; then
         echo "Safe-C Toolchain Installer & Uninstaller"
-        echo "  1) Install / Update Safe-C into GCC/G++"
-        echo "  2) Uninstall Safe-C cleanly"
-        echo "  3) Exit"
+        echo "  1) Install Safe-C into GCC/G++"
+        echo "  2) Update Safe-C (check GitHub Releases)"
+        echo "  3) Uninstall Safe-C cleanly"
+        echo "  4) Exit"
         local menu_choice=""
-        read -r -p "Choose action [1/2/3] (default 1): " menu_choice
+        read -r -p "Choose action [1/2/3/4] (default 1): " menu_choice
         menu_choice="${menu_choice:-1}"
         case "$menu_choice" in
             1|install) ACTION="install" ;;
-            2|uninstall) ACTION="uninstall" ;;
-            3|q|Q|exit) exit 0 ;;
+            2|update) ACTION="update" ;;
+            3|uninstall) ACTION="uninstall" ;;
+            4|q|Q|exit) exit 0 ;;
             *) echo "Invalid choice." >&2; exit 1 ;;
         esac
     fi
 
     case "$ACTION" in
         install) do_install ;;
+        update) do_update ;;
         uninstall) do_uninstall ;;
         *) usage >&2; exit 1 ;;
     esac
