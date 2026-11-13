@@ -54,20 +54,110 @@ static bool cst_to_shwi(tree t, int64_t& out) {
     return false;
 }
 
+static tree resolve_ssa_int_cst(tree t) {
+    for (int depth = 0; t && depth < 8; ++depth) {
+        if (TREE_CODE(t) == INTEGER_CST) {
+            return t;
+        }
+        if (TREE_CODE(t) != SSA_NAME || SSA_NAME_IS_DEFAULT_DEF(t)) {
+            return NULL_TREE;
+        }
+        gimple *def = SSA_NAME_DEF_STMT(t);
+        if (!def || !is_gimple_assign(def)) {
+            return NULL_TREE;
+        }
+        enum tree_code rc = gimple_assign_rhs_code(def);
+        if (rc == INTEGER_CST || rc == SSA_NAME) {
+            t = gimple_assign_rhs1(def);
+            continue;
+        }
+        if ((rc == NOP_EXPR || rc == CONVERT_EXPR) &&
+            INTEGRAL_TYPE_P(TREE_TYPE(t))) {
+            tree inner = gimple_assign_rhs1(def);
+            if (inner && TREE_CODE(inner) == INTEGER_CST && integer_zerop(inner)) {
+                return inner;
+            }
+            if (inner && (TREE_CODE(inner) == SSA_NAME || TREE_CODE(inner) == INTEGER_CST) &&
+                TREE_TYPE(inner) && INTEGRAL_TYPE_P(TREE_TYPE(inner)) &&
+                TYPE_UNSIGNED(TREE_TYPE(t)) == TYPE_UNSIGNED(TREE_TYPE(inner)) &&
+                TYPE_PRECISION(TREE_TYPE(t)) >= TYPE_PRECISION(TREE_TYPE(inner))) {
+                t = inner;
+                continue;
+            }
+        }
+        break;
+    }
+    return NULL_TREE;
+}
+
+static bool is_cond_edge_feasible(edge e, gcond *cond) {
+    if (!e || !cond) return true;
+    tree lhs_cst = resolve_ssa_int_cst(gimple_cond_lhs(cond));
+    tree rhs_cst = resolve_ssa_int_cst(gimple_cond_rhs(cond));
+    if (!lhs_cst || !rhs_cst) return true;
+
+    enum tree_code ccode = gimple_cond_code(cond);
+    bool cond_val = false;
+    bool known = false;
+
+    if (integer_zerop(lhs_cst) && integer_zerop(rhs_cst)) {
+        if (ccode == EQ_EXPR || ccode == LE_EXPR || ccode == GE_EXPR) {
+            cond_val = true;
+            known = true;
+        } else if (ccode == NE_EXPR || ccode == LT_EXPR || ccode == GT_EXPR) {
+            cond_val = false;
+            known = true;
+        }
+    } else if (TREE_TYPE(lhs_cst) && TREE_TYPE(rhs_cst) &&
+               TYPE_UNSIGNED(TREE_TYPE(lhs_cst)) == TYPE_UNSIGNED(TREE_TYPE(rhs_cst))) {
+        int cmp = tree_int_cst_compare(lhs_cst, rhs_cst);
+        known = true;
+        switch (ccode) {
+            case EQ_EXPR: cond_val = (cmp == 0); break;
+            case NE_EXPR: cond_val = (cmp != 0); break;
+            case LT_EXPR: cond_val = (cmp < 0); break;
+            case LE_EXPR: cond_val = (cmp <= 0); break;
+            case GT_EXPR: cond_val = (cmp > 0); break;
+            case GE_EXPR: cond_val = (cmp >= 0); break;
+            default: known = false; break;
+        }
+    } else if (ccode == EQ_EXPR || ccode == NE_EXPR) {
+        int64_t lv = 0, rv = 0;
+        if (cst_to_shwi(lhs_cst, lv) && cst_to_shwi(rhs_cst, rv) && lv >= 0 && rv >= 0) {
+            cond_val = (ccode == EQ_EXPR) ? (lv == rv) : (lv != rv);
+            known = true;
+        }
+    }
+
+    if (!known) return true;
+    if (cond_val && (e->flags & EDGE_FALSE_VALUE)) return false;
+    if (!cond_val && (e->flags & EDGE_TRUE_VALUE)) return false;
+    return true;
+}
+
+static bool ends_with_str(const char* str, const char* suffix) {
+    if (!str || !suffix) return false;
+    size_t len = strlen(str);
+    size_t slen = strlen(suffix);
+    return len >= slen && strcmp(str + len - slen, suffix) == 0;
+}
+
+static bool is_placement_new_asm(const char* asm_name) {
+    return asm_name && strncmp(asm_name, "_Zn", 3) == 0 && ends_with_str(asm_name, "Pv");
+}
+
+static bool is_placement_delete_asm(const char* asm_name) {
+    if (!asm_name) return false;
+    if (strncmp(asm_name, "_Zdl", 4) != 0 && strncmp(asm_name, "_Zda", 4) != 0) {
+        return false;
+    }
+    /* Itanium C++ ABI: placement delete(void*, void*) mangles with PvS_ */
+    return strcmp(asm_name + 4, "PvS_") == 0;
+}
+
 static bool is_dealloc_fn(const char* fn_name, const char* asm_name, safe_c::AllocKind& out_kind) {
-    if (fn_name) {
-        if (strcmp(fn_name, "free") == 0 || strcmp(fn_name, "cfree") == 0) {
-            out_kind = safe_c::AllocKind::Malloc;
-            return true;
-        }
-        if (strcmp(fn_name, "operator delete") == 0) {
-            out_kind = safe_c::AllocKind::New;
-            return true;
-        }
-        if (strcmp(fn_name, "operator delete[]") == 0) {
-            out_kind = safe_c::AllocKind::NewArray;
-            return true;
-        }
+    if (is_placement_delete_asm(asm_name)) {
+        return false;
     }
     if (asm_name) {
         if (strcmp(asm_name, "free") == 0 || strcmp(asm_name, "cfree") == 0) {
@@ -83,10 +173,39 @@ static bool is_dealloc_fn(const char* fn_name, const char* asm_name, safe_c::All
             return true;
         }
     }
+    if (fn_name) {
+        if (strcmp(fn_name, "free") == 0 || strcmp(fn_name, "cfree") == 0) {
+            out_kind = safe_c::AllocKind::Malloc;
+            return true;
+        }
+        if (strcmp(fn_name, "operator delete") == 0) {
+            out_kind = safe_c::AllocKind::New;
+            return true;
+        }
+        if (strcmp(fn_name, "operator delete[]") == 0) {
+            out_kind = safe_c::AllocKind::NewArray;
+            return true;
+        }
+    }
     return false;
 }
 
 static bool is_alloc_fn(const char* fn_name, const char* asm_name, safe_c::AllocKind& out_kind) {
+    if (is_placement_new_asm(asm_name)) {
+        /* Placement new (_ZnwmPv / _ZnamPv / etc.) constructs in-place and does not allocate. */
+        return false;
+    }
+    if (asm_name) {
+        if (strcmp(asm_name, "malloc") == 0 || strcmp(asm_name, "calloc") == 0 ||
+            strcmp(asm_name, "aligned_alloc") == 0 || strcmp(asm_name, "valloc") == 0) {
+            out_kind = safe_c::AllocKind::Malloc;
+            return true;
+        }
+        if (strncmp(asm_name, "_Zn", 3) == 0) {
+            out_kind = (asm_name[3] == 'a') ? safe_c::AllocKind::NewArray : safe_c::AllocKind::New;
+            return true;
+        }
+    }
     if (fn_name) {
         if (strcmp(fn_name, "malloc") == 0 || strcmp(fn_name, "calloc") == 0 ||
             strcmp(fn_name, "aligned_alloc") == 0 || strcmp(fn_name, "valloc") == 0) {
@@ -99,22 +218,6 @@ static bool is_alloc_fn(const char* fn_name, const char* asm_name, safe_c::Alloc
         }
         if (strcmp(fn_name, "operator new[]") == 0) {
             out_kind = safe_c::AllocKind::NewArray;
-            return true;
-        }
-    }
-    if (asm_name) {
-        if (strcmp(asm_name, "malloc") == 0 || strcmp(asm_name, "calloc") == 0 ||
-            strcmp(asm_name, "aligned_alloc") == 0 || strcmp(asm_name, "valloc") == 0) {
-            out_kind = safe_c::AllocKind::Malloc;
-            return true;
-        }
-        if (strncmp(asm_name, "_Zn", 3) == 0) {
-            // Placement new (_ZnwmPv / _ZnamPv / etc.) constructs in-place and does not allocate.
-            size_t len = strlen(asm_name);
-            if (len >= 2 && asm_name[len - 2] == 'P' && asm_name[len - 1] == 'v') {
-                return false;
-            }
-            out_kind = (asm_name[3] == 'a') ? safe_c::AllocKind::NewArray : safe_c::AllocKind::New;
             return true;
         }
     }
@@ -519,6 +622,9 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
             gimple *last_stmt = !gsi_end_p(last_gsi) ? gsi_stmt(last_gsi) : nullptr;
             if (last_stmt && gimple_code(last_stmt) == GIMPLE_COND) {
                 gcond *cond = as_a<gcond*>(last_stmt);
+                if (!is_cond_edge_feasible(e, cond)) {
+                    continue;
+                }
                 enum tree_code ccode = gimple_cond_code(cond);
                 tree lhs = gimple_cond_lhs(cond);
                 tree rhs = gimple_cond_rhs(cond);
@@ -561,6 +667,10 @@ unsigned int execute_memcheck_pass(void* gcc_fun_ptr) {
                     }
                 }
             }
+        }
+
+        if (bb != ENTRY_BLOCK_PTR_FOR_FN(fun) && !has_pred_state) {
+            continue;
         }
 
         // Resolve SSA PHI nodes, preferring live heap bindings over freed or null paths.

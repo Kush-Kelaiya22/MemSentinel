@@ -26,3 +26,29 @@ set_target_properties(safe_c_tests PROPERTIES
 )
 
 add_test(NAME safe_c_unit_tests COMMAND safe_c_tests)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    add_test(
+        NAME legacy_c89_compile
+        COMMAND ${CMAKE_C_COMPILER}
+            -std=c89 -pedantic -Wall -Wextra -Werror
+            -DSAFE_C_ENABLE
+            -fplugin=$<TARGET_FILE:safe_c>
+            -I${CMAKE_SOURCE_DIR}/include
+            -c ${CMAKE_SOURCE_DIR}/tests/compile_pass/c89_legacy.c
+            -o ${CMAKE_CURRENT_BINARY_DIR}/c89_legacy.o
+    )
+endif()
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_test(
+        NAME legacy_cpp98_compile
+        COMMAND ${CMAKE_CXX_COMPILER}
+            -std=c++98 -pedantic -Wall -Wextra -Werror
+            -DSAFE_C_ENABLE
+            -fplugin=$<TARGET_FILE:safe_c>
+            -I${CMAKE_SOURCE_DIR}/include
+            -c ${CMAKE_SOURCE_DIR}/tests/compile_pass/cpp98_legacy.cpp
+            -o ${CMAKE_CURRENT_BINARY_DIR}/cpp98_legacy.o
+    )
+endif()

@@ -1,16 +1,22 @@
 #ifndef SAFE_C_COMMON_H
 #define SAFE_C_COMMON_H
 
-#include <cstddef>
-#include <cstdint>
-#include <string_view>
+#if defined(__cplusplus) && __cplusplus >= 201703L
+  #include <cstddef>
+  #include <cstdint>
+  #include <string_view>
+#elif defined(__cplusplus)
+  #include <cstddef>
+#else
+  #include <stddef.h>
+#endif
 
 #define SAFE_C_VERSION_MAJOR 1
-#define SAFE_C_VERSION_MINOR 1
+#define SAFE_C_VERSION_MINOR 3
 #define SAFE_C_VERSION_PATCH 0
-#define SAFE_C_VERSION_STRING "1.1.0"
+#define SAFE_C_VERSION_STRING "1.3.0"
 
-// Minimum supported GCC version: GCC 4.5.0 introduced -fplugin support
+/* Minimum supported GCC version: GCC 4.5.0 introduced -fplugin support */
 #define SAFE_C_MIN_GCC_MAJOR 4
 #define SAFE_C_MIN_GCC_MINOR 5
 
@@ -42,6 +48,7 @@
 #define SAFE_CPP_API SAFE_C_API
 #define MEMCHECK_API SAFE_C_API
 
+#if defined(__cplusplus) && __cplusplus >= 201703L
 namespace safe_c {
 
 enum class ViolationType {
@@ -94,7 +101,7 @@ struct Config {
     const char* log_file_path = "safe_c_runtime.log";
 };
 
-} // namespace safe_c
+} /* namespace safe_c */
 
 namespace safe_cpp {
     using namespace safe_c;
@@ -103,5 +110,6 @@ namespace safe_cpp {
 namespace memcheck {
     using namespace safe_c;
 }
+#endif
 
-#endif // SAFE_C_COMMON_H
+#endif /* SAFE_C_COMMON_H */

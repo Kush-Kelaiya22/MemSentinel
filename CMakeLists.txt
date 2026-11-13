@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(Safe-C
-    VERSION 1.2.3
+    VERSION 1.3.0
     DESCRIPTION "Safe-C: Native GCC/G++ Memory Safety Plugin and Toolchain Addon with Compile-Time Enforcement and Runtime Guardrails"
     LANGUAGES C CXX
 )
@@ -106,7 +106,7 @@ install(FILES install.ps1 README.md LICENSE DESTINATION .)
 set(CPACK_PACKAGE_NAME "Safe-C")
 set(CPACK_PACKAGE_VENDOR "Safe-C Contributors")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Safe-C: Native Compile-Time Memory Safety Extension for GCC and G++")
-set(CPACK_PACKAGE_VERSION "1.2.3")
+set(CPACK_PACKAGE_VERSION "1.3.0")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
 if(WIN32)
