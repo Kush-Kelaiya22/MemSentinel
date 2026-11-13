@@ -15,6 +15,8 @@ Safe-C includes an automated test harness covering static compile-fail suites, c
 | **Lexical Block Scoping** | `test_lexical_block_scope_resolution()` | Verifies compound statement blocks (`{ ... }`), ensuring unescaped inner allocations leak at `}`, while escaped variables compile cleanly. |
 | **GNU/GCC Diagnostic Formatting** | `test_gnu_gcc_diagnostic_highlighting()` | Verifies line number gutters, token carets, underline tildes, ANSI colorization, and `-fno-diagnostics-show-highlight-colors` toggle. |
 | **Runtime Guardrail Suite** | `test_runtime_guardrails()` | Verifies `libsafe_c_rt` dynamic heap tracking and `safe_c_runtime.log` emission. |
+| **Edge Cases & STL Invalidation** | `test_v1_1_edge_cases()` | Verifies OOB/null/uninit deref, dangling stack returns, mismatched deallocs, and STL container iterator/`.data()`/`.c_str()` invalidation. |
+| **Legacy C89 & C++98 Suite** | `test_legacy_standards()` + CTest `legacy_c89_compile` / `legacy_cpp98_compile` | Verifies strict `-std=c89 -pedantic -Wall -Wextra -Werror` (K&R/ANSI + `safe_c/api.h`) and `-std=c++98 -pedantic -Wall -Wextra -Werror` (`new int(42)`, `new Box98[2]`, `delete`/`delete[]`). |
 
 ---
 

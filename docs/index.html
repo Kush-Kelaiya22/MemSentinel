@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Safe-C — Compile-Time Memory Safety Plugin for GCC &amp; G++</title>
-  <meta name="description" content="Safe-C is a native GCC/G++ compiler plugin and MinGW-w64 addon that checks heap lifetimes, pointer bounds, null/uninitialized dereferences, deallocator mismatches, and STL iterator invalidation at compile time.">
+  <meta name="description" content="Safe-C is a native GCC/G++ compiler plugin and MinGW-w64 addon that checks heap lifetimes, pointer bounds, null/uninitialized dereferences, deallocator mismatches, and STL iterator invalidation at compile time across C89–C23 and C++98–C++23.">
   <style>
     :root {
       --bg: #0b0f14;
@@ -539,6 +539,7 @@
       </a>
       <nav class="nav" aria-label="Primary navigation">
         <a href="#checks">Checks</a>
+        <a href="#standards">Standards</a>
         <a href="#comparison">vs. Rust &amp; Others</a>
         <a href="#how-it-works">How It Works</a>
         <a href="#performance">Performance</a>
@@ -564,6 +565,8 @@
       <div class="btn-row">
         <a class="btn btn-primary" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.3.0/Safe-C-1.3.0-Linux.tar.gz">Download Linux (.tar.gz)</a>
         <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.3.0/Safe-C-1.3.0-win64.zip">Download Windows (.zip)</a>
+        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.3.0/install.sh">install.sh</a>
+        <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.3.0/install.ps1">install.ps1</a>
         <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C/releases/tag/v1.3.0">Release Notes</a>
         <a class="btn" href="https://github.com/Kush-Kelaiya22/Safe-C">Repository</a>
       </div>
@@ -581,8 +584,8 @@
           <div class="metric-label">Static GIMPLE &amp; AST diagnostics</div>
         </div>
         <div class="metric-item">
-          <div class="metric-value">0 rewrites</div>
-          <div class="metric-label">Works on standard C &amp; C++</div>
+          <div class="metric-value">C89&ndash;C++23</div>
+          <div class="metric-label">Zero-rewrite legacy to modern support</div>
         </div>
       </div>
     </div>
@@ -682,7 +685,7 @@
           <ul>
             <li><strong>Returned allocations:</strong> allocating in a helper function and returning the pointer to the caller.</li>
             <li><strong>Ownership transfer:</strong> assigning a local allocation into an outer pointer, parameter slot, or struct field.</li>
-            <li><strong>Safe STL &amp; RAII:</strong> <code>it = v.erase(it)</code> refresh, mutating immediately before <code>break</code>/<code>return</code>, indexed loops, and placement <code>new</code>.</li>
+            <li><strong>Safe STL &amp; legacy C++:</strong> <code>it = v.erase(it)</code> refresh, mutating immediately before <code>break</code>/<code>return</code>, indexed loops, <code>std::auto_ptr</code>, initialized <code>new T(...)</code>/<code>new T[N]</code>, and placement <code>new</code>/<code>delete</code>.</li>
             <li><strong>Pointer arithmetic with backup:</strong> advancing a cursor or shifting a base pointer while another variable keeps offset 0.</li>
             <li><strong>Safe no-ops &amp; guarded branches:</strong> <code>free(NULL)</code>, <code>delete nullptr</code>, <code>realloc()</code> re-assignment, and dereferences guarded by <code>if (p)</code>.</li>
           </ul>
@@ -714,6 +717,36 @@ void invalid_buffer(void) {
 }</code></pre>
     </section>
 
+    <section id="standards">
+      <h2>Supported C &amp; C++ Standards (v1.3.0)</h2>
+      <p>
+        Safe-C protects both decades-old legacy codebases and modern projects without requiring language upgrades, smart-pointer rewrites, or dialect flags.
+      </p>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title"><span class="dot dot-ok"></span>ISO C: <code>-std=c89</code> through <code>-std=c23</code></div>
+          <ul>
+            <li><strong>Tested dialects:</strong> <code>c89</code>, <code>gnu89</code>, <code>c90</code>, <code>gnu90</code>, <code>c99</code>, <code>gnu99</code>, <code>c11</code>, <code>gnu11</code>, <code>c17</code>, <code>gnu17</code>, <code>c23</code>, <code>gnu23</code> (and <code>-ansi -pedantic</code>).</li>
+            <li><strong>Legacy idioms:</strong> K&amp;R and ANSI C89 prototypes, top-of-block declarations, <code>malloc</code>/<code>calloc</code>/<code>realloc</code>/<code>free</code>, and <code>NULL</code> / <code>(void*)0</code> guards.</li>
+            <li><strong>Clean C89 headers:</strong> <code>safe_c/api.h</code> and <code>safe_c/common.h</code> compile with <code>-std=c89 -pedantic -Wall -Wextra -Werror</code>.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="dot dot-ok"></span>ISO C++: <code>-std=c++98</code> through <code>-std=c++23</code></div>
+          <ul>
+            <li><strong>Tested dialects:</strong> <code>c++98</code>, <code>gnu++98</code>, <code>c++03</code>, <code>gnu++03</code>, <code>c++11</code> through <code>c++23</code> and <code>gnu++*</code> counterparts.</li>
+            <li><strong>Clean GIMPLE analysis:</strong> Handles initialized <code>new T(val)</code>, non-trivial <code>new T[N]</code> arrays, placement <code>new</code>/<code>delete</code> (<code>std::_Construct</code>), <code>std::auto_ptr</code>, RAII, and STL iterators.</li>
+            <li><strong>Guarded headers:</strong> C++17 helpers in <code>safe_c/common.h</code> are gated behind <code>__cplusplus &gt;= 201703L</code>, keeping the C API available in C++98–C++14.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="note-box">
+        <strong>Self-hosted verification:</strong> Safe-C's own C++ codebase (<code>src/core</code>, <code>src/runtime</code>, <code>src/plugin</code>, and test suite) is compiled cleanly with <code>-DSAFE_C_ENABLE</code> and checked in CI on both Ubuntu Linux (GCC) and Windows (MinGW-w64 UCRT64), alongside strict <code>-std=c89 -pedantic</code> and <code>-std=c++98 -pedantic</code> regression tests.
+      </div>
+    </section>
+
     <section id="comparison">
       <h2>How Safe-C Differs from Rust &amp; Other Languages</h2>
       <p>
@@ -735,7 +768,7 @@ void invalid_buffer(void) {
           <tbody>
             <tr>
               <td>Language &amp; ABI</td>
-              <td>Standard C11/C17 &amp; C++20; keeps existing C/C++ ABI intact</td>
+              <td>Standard C89&ndash;C23 &amp; C++98&ndash;C++23; keeps existing C/C++ ABI intact</td>
               <td>Requires rewriting in Rust or wrapping C APIs in <code>unsafe</code> blocks</td>
               <td>Different language + managed VM / FFI marshalling boundary</td>
               <td>Standard C/C++ via compiler instrumentation flags</td>
@@ -807,7 +840,7 @@ void invalid_buffer(void) {
             <tr>
               <td>Linux GCC plugin</td>
               <td><code>safe_c.so</code></td>
-              <td>Runs a Reverse-Post-Order (RPO) GIMPLE CFG pass inside <code>cc1</code>/<code>cc1plus</code> after SSA construction, merging predecessor states at <code>GIMPLE_PHI</code> nodes.</td>
+              <td>Runs a Reverse-Post-Order (RPO) GIMPLE CFG pass inside <code>cc1</code>/<code>cc1plus</code> after SSA construction, pruning unreachable constant/cleanup branches, distinguishing placement <code>new</code>/<code>delete</code>, and merging states at <code>GIMPLE_PHI</code> nodes.</td>
             </tr>
             <tr>
               <td>GCC toolchain specs</td>
@@ -907,30 +940,34 @@ void invalid_buffer(void) {
     </section>
 
     <section id="install">
-      <h2>Building &amp; Installing Into Your Compiler</h2>
+      <h2>Installing &amp; Integrating Into Your Compiler</h2>
 
-      <h3>1. Build From Source &amp; Run Tests</h3>
+      <h3>1. Interactive Installer, Web Fetch, Updater &amp; Uninstaller (Recommended)</h3>
+      <p>
+        Download <code>install.sh</code> (Linux / POSIX / MSYS2) or <code>install.ps1</code> (Windows PowerShell) standalone or run them from a cloned repository or extracted archive. Each script detects your GCC/G++ toolchains, asks you to confirm or manually enter a custom compiler path, installs the plugin/specs/runtime files, and tracks a manifest so <code>update</code> and <code>uninstall</code> leave unrelated system files untouched:
+      </p>
+<pre><code># Linux / POSIX / MSYS2 / Git Bash:
+curl -fsSL https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.3.0/install.sh -o install.sh
+chmod +x install.sh
+./install.sh --from-web                         # fetch prebuilt plugin &amp; specs directly
+./install.sh --from-web --release v1.3.0        # pin a specific release tag
+./install.sh --from-web --gcc /usr/bin/gcc      # skip detection with a custom gcc path
+./install.sh update                             # upgrade when a newer release exists
+./install.sh uninstall                          # remove Safe-C &amp; restore specs backup
+
+# Windows (PowerShell):
+Invoke-WebRequest -Uri https://github.com/Kush-Kelaiya22/Safe-C/releases/download/v1.3.0/install.ps1 -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -FromWeb
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -FromWeb -GccPath C:\msys64\ucrt64\bin\gcc.exe
+powershell -ExecutionPolicy Bypass -File .\install.ps1 update
+powershell -ExecutionPolicy Bypass -File .\install.ps1 uninstall</code></pre>
+
+      <h3>2. Build From Source &amp; Run Tests</h3>
 <pre><code>git clone https://github.com/Kush-Kelaiya22/Safe-C.git
 cd Safe-C
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ctest --test-dir build --output-on-failure</code></pre>
-
-      <h3>2. Interactive Installer &amp; Uninstaller (Linux &amp; Windows)</h3>
-      <p>
-        Run the interactive installer script for your platform (either from source/archive or standalone with <code>--from-web</code> / <code>-FromWeb</code> to fetch the release package directly from GitHub Releases). It detects installed <code>gcc</code> / <code>g++</code> toolchains, asks you to confirm or manually enter a custom compiler path, copies plugin/specs/runtime files cleanly, and records a manifest so <code>uninstall</code> reverts only Safe-C files without disturbing other parts of your system:
-      </p>
-<pre><code># Linux / POSIX / MSYS2 / Git Bash:
-./install.sh              # interactive menu (detects gcc, asks confirmation or manual path)
-./install.sh --from-web   # fetch prebuilt plugin &amp; specs directly from GitHub Releases
-./install.sh update       # check GitHub Releases and update when a newer version is released
-./install.sh uninstall    # cleanly removes Safe-C and restores any prior specs backup
-
-# Windows (PowerShell):
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -FromWeb
-powershell -ExecutionPolicy Bypass -File .\install.ps1 update
-powershell -ExecutionPolicy Bypass -File .\install.ps1 uninstall</code></pre>
 
       <h3>3. Non-Invasive Alias or Manual System GCC Setup</h3>
       <p>
