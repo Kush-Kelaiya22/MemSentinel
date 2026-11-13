@@ -71,8 +71,30 @@ Load the native Safe-C plugin during standard compilation:
   g++ -fplugin=build/lib/safe_c.so -c app.cpp -o app.o
   ```
 
-### 2. Universal Zero-Flag Auto-Loading Integration
-Safe-C provides a toolchain integration script that configures `gcc` and `g++` to auto-load Safe-C by default on every compilation with **zero flags or arguments needed**:
+### 2. Interactive Toolchain Installer & Uninstaller (`install.sh` / `install.ps1`)
+Safe-C includes interactive installer/uninstaller scripts that automatically detect `gcc`/`g++` on your system, ask you to confirm or manually enter a compiler path, copy the plugin/specs/runtime files cleanly, and provide full uninstallation without disturbing unrelated system files:
+
+- **Linux / POSIX / MSYS2 / Git Bash:**
+  ```bash
+  # Interactive install / uninstall menu (detects gcc & asks for confirmation or manual path)
+  ./install.sh
+
+  # Direct CLI modes:
+  ./install.sh install --gcc /usr/bin/gcc
+  ./install.sh uninstall
+  ```
+
+- **Windows (PowerShell):**
+  ```powershell
+  # Interactive install / uninstall (detects MinGW-w64 gcc.exe & allows manual path entry)
+  powershell -ExecutionPolicy Bypass -File .\install.ps1
+
+  # Direct CLI modes:
+  powershell -ExecutionPolicy Bypass -File .\install.ps1 install -GccPath C:\msys64\ucrt64\bin\gcc.exe
+  powershell -ExecutionPolicy Bypass -File .\install.ps1 uninstall
+  ```
+
+Safe-C also retains the headless Python helper (`tools/integrate_toolchain.py`) for CI or non-plugin MinGW-w64 environments:
 
 ```bash
 # Run integration on your current default GCC
@@ -85,7 +107,7 @@ python tools/integrate_toolchain.py F:\mingw-w64\mingw64\bin\gcc.exe
 Once integrated:
 - Standard `gcc main.c` and `g++ app.cpp` automatically run Safe-C compile-time memory checks.
 - Compatible with all GCC / MinGW-w64 distributions (both plugin-enabled and non-plugin builds).
-- To uninstall anytime: `python tools/integrate_toolchain.py --uninstall`
+- To uninstall anytime: run `./install.sh uninstall`, `.\install.ps1 uninstall`, or `python tools/integrate_toolchain.py --uninstall`
 
 ### 3. Direct GCC / G++ Plugin Invocation
 You can also invoke Safe-C explicitly via compiler flags:

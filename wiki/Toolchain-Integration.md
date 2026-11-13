@@ -2,6 +2,27 @@
 
 Safe-C provides native integration for both Windows (MinGW-w64) and POSIX/Linux (GCC).
 
+## Interactive Installer & Uninstaller (`install.sh` / `install.ps1`)
+
+Safe-C includes interactive shell scripts for Linux/POSIX/MSYS2 (`install.sh`) and Windows PowerShell (`install.ps1`). Both scripts:
+- Auto-detect installed `gcc` and `g++` compilers, display the discovered toolchain/plugin/specs directories, and ask you to confirm or manually enter a custom `gcc`/`g++` path.
+- Copy the plugin (`safe_c.so` / `safe_c.dll`), generate a merged `specs` file from `gcc -dumpspecs` (backing up any existing non-Safe-C `specs` file first), and optionally install `libsafe_c_rt` runtime libraries and headers.
+- Track installed files in a local `safe_c.manifest` so `uninstall` removes only Safe-C files and restores backups cleanly without disturbing other system packages.
+
+```bash
+# Linux / MSYS2 / Git Bash:
+./install.sh              # interactive menu (Install / Uninstall)
+./install.sh uninstall    # clean removal without touching unrelated system files
+```
+
+```powershell
+# Windows PowerShell:
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 uninstall
+```
+
+---
+
 ## Direct GCC & G++ Plugin Usage
 
 Safe-C is built as a pure native shared library (`safe_c.dll` on Windows, `safe_c.so` on Linux):
