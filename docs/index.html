@@ -918,14 +918,16 @@ ctest --test-dir build --output-on-failure</code></pre>
 
       <h3>2. Interactive Installer &amp; Uninstaller (Linux &amp; Windows)</h3>
       <p>
-        Run the interactive installer script for your platform. It detects installed <code>gcc</code> / <code>g++</code> toolchains, asks you to confirm or manually enter a custom compiler path, copies plugin/specs/runtime files cleanly, and records a manifest so <code>uninstall</code> reverts only Safe-C files without disturbing other parts of your system:
+        Run the interactive installer script for your platform (either from source/archive or standalone with <code>--from-web</code> / <code>-FromWeb</code> to fetch the release package directly from GitHub Releases). It detects installed <code>gcc</code> / <code>g++</code> toolchains, asks you to confirm or manually enter a custom compiler path, copies plugin/specs/runtime files cleanly, and records a manifest so <code>uninstall</code> reverts only Safe-C files without disturbing other parts of your system:
       </p>
 <pre><code># Linux / POSIX / MSYS2 / Git Bash:
 ./install.sh              # interactive menu (detects gcc, asks confirmation or manual path)
+./install.sh --from-web   # fetch prebuilt plugin &amp; specs directly from GitHub Releases
 ./install.sh uninstall    # cleanly removes Safe-C and restores any prior specs backup
 
 # Windows (PowerShell):
 powershell -ExecutionPolicy Bypass -File .\install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -FromWeb
 powershell -ExecutionPolicy Bypass -File .\install.ps1 uninstall</code></pre>
 
       <h3>3. Non-Invasive Alias or Manual System GCC Setup</h3>
