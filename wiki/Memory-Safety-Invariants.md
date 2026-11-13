@@ -24,4 +24,5 @@ Safe-C enforces compile-time memory safety across both C and C++ while eliminati
 - **Pointer Arithmetic with Base Retention:** Modifying a cursor (`b += 5;`) is valid as long as another variable (`a = b;`) retains the base address.
 - **Null-Safe Idioms:** `free(NULL)`, `delete nullptr`, and `if (p != NULL) { ... free(p); }` are recognized as safe.
 - **Reassignment & `realloc`:** Reassigning a freed pointer to a new allocation and `realloc` null-failure fallback (`tmp = realloc(p, n); if (tmp) p = tmp; free(p);`) are handled accurately via CFG + `GIMPLE_PHI` analysis.
-- **C++ RAII, STL & Placement `new`:** `std::vector` resizing/mutation, `std::unique_ptr`, and STL placement `new` (`::new(loc) T(...)`) compile cleanly without false positives.
+- **C++ RAII, STL & Placement `new` / `delete`:** `std::vector` resizing/mutation, `std::unique_ptr`, `std::auto_ptr`, initialized `new T(...)` / `new T[N]`, and STL placement `new`/`delete` (`::new(loc) T(...)`, `std::_Construct`) compile cleanly without false positives.
+- **Legacy & Modern Language Standards (`C89`–`C23` & `C++98`–`C++23`):** K&R and ANSI C89 prototypes, `safe_c/api.h` / `safe_c/common.h` under `-std=c89 -pedantic -Wall -Wextra -Werror`, and all C++98 through C++23 dialects are supported.
